@@ -13,7 +13,8 @@ public struct DashboardView: View {
     @State private var panelState: PanelState = .collapsed
     @State private var isSettingsPresented = false
     @State private var expandedRouteID: String?
-    @GestureState private var dragTranslation: CGFloat = 0
+    @State private var dragTranslation: CGFloat = 0
+    @State private var isDraggingSheet = false
 
     public init(viewModel: DashboardViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -52,10 +53,18 @@ public struct DashboardView: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: sheetHeight, alignment: .top)
                         .offset(y: liveTop)
+                        .transaction { transaction in
+                            if isDraggingSheet {
+                                transaction.animation = nil
+                            }
+                        }
                         .highPriorityGesture(
                             DragGesture()
-                                .updating($dragTranslation) { value, state, _ in
-                                    state = value.translation.height
+                                .onChanged { value in
+                                    if !isDraggingSheet {
+                                        isDraggingSheet = true
+                                    }
+                                    dragTranslation = value.translation.height
                                 }
                                 .onEnded { value in
                                     let proposed = clampedTop(
@@ -71,7 +80,11 @@ public struct DashboardView: View {
                                     let nearest = targets.min {
                                         abs($0.1 - proposed) < abs($1.1 - proposed)
                                     }?.0 ?? .collapsed
-                                    panelState = nearest
+                                    withAnimation(.interactiveSpring(response: 0.26, dampingFraction: 0.88, blendDuration: 0.14)) {
+                                        panelState = nearest
+                                        dragTranslation = 0
+                                        isDraggingSheet = false
+                                    }
                                 }
                         )
 
