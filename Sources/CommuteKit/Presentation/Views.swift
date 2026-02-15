@@ -23,9 +23,14 @@ public struct DashboardView: View {
     public var body: some View {
         NavigationStack {
             GeometryReader { proxy in
+                let routeCount = 3
                 let sheetHeight = proxy.size.height * 0.82
-                let expandedTop = proxy.size.height * 0.33
-                let collapsedCardsHeight = WalletRouteList.collapsedStackHeight(routeCount: 3)
+                let maxExpandedTop = proxy.size.height * 0.22
+                let expandedListHeight = WalletRouteList.listHeight(routeCount: routeCount)
+                let expandedVisibleHeight = expandedListHeight + 28 + proxy.safeAreaInsets.bottom
+                let expandedTop = max(maxExpandedTop, proxy.size.height - expandedVisibleHeight)
+
+                let collapsedCardsHeight = WalletRouteList.collapsedStackHeight(routeCount: routeCount)
                 let collapsedVisibleHeight = collapsedCardsHeight + 48 + proxy.safeAreaInsets.bottom
                 let collapsedTop = max(expandedTop + 56, proxy.size.height - collapsedVisibleHeight + 18)
                 let hiddenTop = proxy.size.height + 32
@@ -409,6 +414,7 @@ private struct WalletRouteList: View {
     let routes: [RouteCardModel]
     @Binding var expandedRouteID: String?
     let displayMode: DisplayMode
+    @Namespace private var cardMorph
 
     private static let rowSpacing: CGFloat = 10
     private static let stackSpacing: CGFloat = 62
@@ -418,55 +424,65 @@ private struct WalletRouteList: View {
         (stackSpacing * CGFloat(max(routeCount - 1, 0))) + collapsedCardHeight
     }
 
+    static func listHeight(routeCount: Int) -> CGFloat {
+        let spacing = rowSpacing * CGFloat(max(routeCount - 1, 0))
+        return (collapsedCardHeight * CGFloat(routeCount)) + spacing
+    }
+
     var body: some View {
-        switch displayMode {
-        case .list:
-            VStack(spacing: Self.rowSpacing) {
-                ForEach(routes) { route in
-                    let isExpanded = expandedRouteID == route.id
-                    WalletRouteCard(
-                        route: route,
-                        expanded: isExpanded
-                    )
-                    .onTapGesture {
-                        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                            expandedRouteID = expandedRouteID == route.id ? nil : route.id
-                        }
+        Group {
+            if displayMode == .list {
+                VStack(spacing: Self.rowSpacing) {
+                    ForEach(routes) { route in
+                        routeCard(route)
+                            .matchedGeometryEffect(id: route.id, in: cardMorph)
                     }
                 }
-            }
-            .frame(maxWidth: .infinity)
-            .animation(.spring(response: 0.34, dampingFraction: 0.86), value: expandedRouteID)
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            } else {
+                ZStack(alignment: .top) {
+                    ForEach(Array(visibleStackRoutes.enumerated()), id: \.element.id) { index, route in
+                        let selectedIndex = visibleStackRoutes.firstIndex(where: { $0.id == expandedRouteID })
+                        let isExpanded = expandedRouteID == route.id
 
-        case .stack:
-            ZStack(alignment: .top) {
-                ForEach(Array(routes.enumerated()), id: \.element.id) { index, route in
-                    let selectedIndex = routes.firstIndex(where: { $0.id == expandedRouteID })
-                    let isExpanded = expandedRouteID == route.id
-
-                    WalletRouteCard(
-                        route: route,
-                        expanded: isExpanded
-                    )
-                    .offset(y: stackCardOffset(for: index, selectedIndex: selectedIndex, isExpanded: isExpanded))
-                    .opacity(stackCardOpacity(for: index, selectedIndex: selectedIndex))
-                    .scaleEffect(isExpanded ? 1.0 : 0.98)
-                    .zIndex(stackZIndex(for: index, isExpanded: isExpanded))
-                    .onTapGesture {
-                        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
-                            expandedRouteID = expandedRouteID == route.id ? nil : route.id
-                        }
+                        routeCard(route)
+                            .matchedGeometryEffect(id: route.id, in: cardMorph)
+                            .offset(y: stackCardOffset(for: index, selectedIndex: selectedIndex, isExpanded: isExpanded))
+                            .opacity(stackCardOpacity(for: index, selectedIndex: selectedIndex))
+                            .scaleEffect(isExpanded ? 1.0 : 0.98)
+                            .zIndex(stackZIndex(for: index, isExpanded: isExpanded))
                     }
                 }
+                .frame(height: stackContainerHeight)
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
-            .frame(height: stackContainerHeight)
-            .frame(maxWidth: .infinity)
-            .animation(.spring(response: 0.42, dampingFraction: 0.86), value: expandedRouteID)
         }
+        .frame(maxWidth: .infinity)
+        .animation(.spring(response: 0.36, dampingFraction: 0.86), value: displayMode)
+        .animation(.spring(response: 0.36, dampingFraction: 0.86), value: expandedRouteID)
     }
 
     private var stackContainerHeight: CGFloat {
-        expandedRouteID == nil ? Self.collapsedStackHeight(routeCount: routes.count) : 240
+        expandedRouteID == nil ? Self.collapsedStackHeight(routeCount: visibleStackRoutes.count) : 240
+    }
+
+    private var visibleStackRoutes: [RouteCardModel] {
+        guard let expandedRouteID else { return routes }
+        return routes.filter { $0.id == expandedRouteID }
+    }
+
+    @ViewBuilder
+    private func routeCard(_ route: RouteCardModel) -> some View {
+        let isExpanded = expandedRouteID == route.id
+        WalletRouteCard(
+            route: route,
+            expanded: isExpanded
+        )
+        .onTapGesture {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                expandedRouteID = expandedRouteID == route.id ? nil : route.id
+            }
+        }
     }
 
     private func stackCardOffset(for index: Int, selectedIndex: Int?, isExpanded: Bool) -> CGFloat {
