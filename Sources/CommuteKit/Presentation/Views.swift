@@ -44,7 +44,7 @@ public struct DashboardView: View {
                         .ignoresSafeArea()
 
                     pinnedTopControls
-                        .padding(.top, 8)
+                        .padding(.top, 4)
                         .padding(.horizontal, 14)
                         .frame(maxWidth: .infinity, alignment: .top)
 
@@ -119,19 +119,51 @@ public struct DashboardView: View {
                 settingsSheet
                     .presentationDetents([.medium, .large])
             }
+#if os(iOS)
+            .toolbar(.hidden, for: .navigationBar)
+#endif
         }
     }
 
     private var pinnedTopControls: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Picker("Direction", selection: $viewModel.direction) {
-                Text("Home → Work").tag(Direction.homeToWork)
-                Text("Work → Home").tag(Direction.workToHome)
+        HStack(spacing: 10) {
+            Button {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                    toggleDirection()
+                }
+                Task {
+                    await viewModel.refreshPlan()
+                }
+            } label: {
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 44, height: 44)
+                    .background {
+                        Circle()
+                            .fill(.ultraThinMaterial)
+                            .opacity(0.82)
+                    }
+                    .overlay {
+                        Circle().stroke(.white.opacity(0.22), lineWidth: 1)
+                    }
             }
-            .pickerStyle(.segmented)
-            .padding(8)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            Text(directionLabel)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 14)
+                .background {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .opacity(0.82)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(.white.opacity(0.18), lineWidth: 1)
+                }
 
             Button {
                 isSettingsPresented = true
@@ -139,11 +171,30 @@ public struct DashboardView: View {
                 Image(systemName: "gearshape.fill")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.primary)
-                    .frame(width: 42, height: 42)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Circle())
+                    .frame(width: 44, height: 44)
+                    .background {
+                        Circle()
+                            .fill(.ultraThinMaterial)
+                            .opacity(0.82)
+                    }
+                    .overlay {
+                        Circle().stroke(.white.opacity(0.22), lineWidth: 1)
+                    }
             }
         }
+    }
+
+    private var directionLabel: String {
+        switch viewModel.direction {
+        case .homeToWork:
+            "Home → Work"
+        case .workToHome:
+            "Work → Home"
+        }
+    }
+
+    private func toggleDirection() {
+        viewModel.direction = viewModel.direction == .homeToWork ? .workToHome : .homeToWork
     }
 
     private var panelSheet: some View {
