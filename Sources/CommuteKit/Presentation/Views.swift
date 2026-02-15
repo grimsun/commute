@@ -25,8 +25,8 @@ public struct DashboardView: View {
                 let sheetHeight = proxy.size.height * 0.82
                 let expandedTop = proxy.size.height * 0.14
                 let collapsedCardsHeight = WalletRouteList.collapsedHeight(routeCount: 3)
-                let collapsedVisibleHeight = collapsedCardsHeight + 72 + proxy.safeAreaInsets.bottom
-                let collapsedTop = max(expandedTop + 56, proxy.size.height - collapsedVisibleHeight)
+                let collapsedVisibleHeight = collapsedCardsHeight + 48 + proxy.safeAreaInsets.bottom
+                let collapsedTop = max(expandedTop + 56, proxy.size.height - collapsedVisibleHeight + 18)
                 let hiddenTop = proxy.size.height + 32
                 let anchoredTop = topAnchor(
                     expanded: expandedTop,
@@ -51,12 +51,6 @@ public struct DashboardView: View {
                     panelSheet
                         .frame(maxWidth: .infinity)
                         .frame(height: sheetHeight, alignment: .top)
-                        .overlay(alignment: .top) {
-                            Capsule()
-                                .fill(.secondary.opacity(0.45))
-                                .frame(width: 46, height: 5)
-                                .padding(.top, 8)
-                        }
                         .offset(y: liveTop)
                         .highPriorityGesture(
                             DragGesture()
@@ -202,7 +196,7 @@ public struct DashboardView: View {
             VStack(spacing: 12) {
                 content
             }
-            .padding()
+            .padding(.horizontal, 8)
             .padding(.top, 10)
             .padding(.bottom, 12)
         }
@@ -288,7 +282,7 @@ public struct DashboardView: View {
                 subtitle: plan.carOption.isTrafficGood ? "Traffic is good" : "Traffic is heavy",
                 detail: plan.carOption.reason,
                 etaMinutes: Int(plan.carOption.eta / 60),
-                accent: .orange
+                accent: Color(red: 0.98, green: 0.46, blue: 0.10)
             ),
             RouteCardModel(
                 id: "station1",
@@ -296,7 +290,7 @@ public struct DashboardView: View {
                 subtitle: "Train \(plan.multimodalOption.selectedTrain.tripId)",
                 detail: "Depart \(plan.multimodalOption.selectedTrain.departureTime.formatted(date: .omitted, time: .shortened))",
                 etaMinutes: Int(plan.multimodalOption.selectedTrain.arrivalTime.timeIntervalSince(plan.generatedAt) / 60),
-                accent: .blue
+                accent: Color(red: 0.13, green: 0.46, blue: 0.96)
             ),
             RouteCardModel(
                 id: "station2",
@@ -304,7 +298,7 @@ public struct DashboardView: View {
                 subtitle: plan.multimodalOption.fallbackTrain.map { "Fallback \($0.tripId)" } ?? "Alternative route",
                 detail: "Too late at \(plan.multimodalOption.attemptTimes.tooLateAt.formatted(date: .omitted, time: .shortened))",
                 etaMinutes: plan.multimodalOption.fallbackTrain.map { Int($0.arrivalTime.timeIntervalSince(plan.generatedAt) / 60) } ?? Int(plan.multimodalOption.selectedTrain.arrivalTime.timeIntervalSince(plan.generatedAt) / 60) + 8,
-                accent: .green
+                accent: Color(red: 0.14, green: 0.72, blue: 0.26)
             )
         ]
     }
@@ -346,13 +340,13 @@ private struct RealMapBackground: View {
     var body: some View {
         Map(initialPosition: mapPosition) {
             MapPolyline(coordinates: Self.carCoordinates)
-                .stroke(.orange, lineWidth: 7)
+                .stroke(.orange, lineWidth: 10)
 
             MapPolyline(coordinates: Self.station1Coordinates)
-                .stroke(.blue, style: StrokeStyle(lineWidth: 7, lineCap: .round, dash: [8, 6]))
+                .stroke(.blue, style: StrokeStyle(lineWidth: 10, lineCap: .round, dash: [8, 6]))
 
             MapPolyline(coordinates: Self.station2Coordinates)
-                .stroke(.green, style: StrokeStyle(lineWidth: 7, lineCap: .round, dash: [4, 6]))
+                .stroke(.green, style: StrokeStyle(lineWidth: 10, lineCap: .round, dash: [4, 6]))
 
             Annotation("Start", coordinate: Self.station1Coordinates.first ?? Self.sfCenter) {
                 mapPin(color: .white)
@@ -488,7 +482,7 @@ private struct WalletRouteCard: View {
         .padding(14)
         .frame(maxWidth: .infinity)
         .frame(height: expanded ? 210 : 120, alignment: .top)
-        .background(route.accent.opacity(0.97))
+        .background(route.accent)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 5)
     }
