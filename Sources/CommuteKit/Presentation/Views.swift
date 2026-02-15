@@ -327,63 +327,52 @@ public struct DashboardView: View {
 }
 
 private struct RealMapBackground: View {
-    private static let sfCenter = CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194)
+    private struct RouteOverlay: Identifiable {
+        let id: String
+        let coordinates: [CLLocationCoordinate2D]
+        let color: Color
+        let dashed: Bool
+        let lineWidth: CGFloat
+    }
 
-    private static let carCoordinates = [
-        CLLocationCoordinate2D(latitude: 37.7895, longitude: -122.3969),
-        CLLocationCoordinate2D(latitude: 37.7830, longitude: -122.4045),
-        CLLocationCoordinate2D(latitude: 37.7764, longitude: -122.4141),
-        CLLocationCoordinate2D(latitude: 37.7682, longitude: -122.4295)
-    ]
+    private static let sfCaltrain = CLLocationCoordinate2D(latitude: 37.7764, longitude: -122.3946)
+    private static let paloAltoCaltrain = CLLocationCoordinate2D(latitude: 37.4436, longitude: -122.1651)
 
-    private static let station1Coordinates = [
-        CLLocationCoordinate2D(latitude: 37.7901, longitude: -122.3945),
-        CLLocationCoordinate2D(latitude: 37.7829, longitude: -122.4021),
-        CLLocationCoordinate2D(latitude: 37.7768, longitude: -122.4108),
-        CLLocationCoordinate2D(latitude: 37.7718, longitude: -122.4206),
-        CLLocationCoordinate2D(latitude: 37.7662, longitude: -122.4308)
-    ]
-
-    private static let station2Coordinates = [
-        CLLocationCoordinate2D(latitude: 37.7908, longitude: -122.4010),
-        CLLocationCoordinate2D(latitude: 37.7862, longitude: -122.4082),
-        CLLocationCoordinate2D(latitude: 37.7792, longitude: -122.4181),
-        CLLocationCoordinate2D(latitude: 37.7720, longitude: -122.4270),
-        CLLocationCoordinate2D(latitude: 37.7648, longitude: -122.4358)
-    ]
+    @State private var routeOverlays: [RouteOverlay] = []
 
     private let mapPosition = MapCameraPosition.region(
         MKCoordinateRegion(
-            center: sfCenter,
-            span: MKCoordinateSpan(latitudeDelta: 0.035, longitudeDelta: 0.035)
+            center: CLLocationCoordinate2D(
+                latitude: (sfCaltrain.latitude + paloAltoCaltrain.latitude) / 2.0,
+                longitude: (sfCaltrain.longitude + paloAltoCaltrain.longitude) / 2.0
+            ),
+            span: MKCoordinateSpan(latitudeDelta: 0.45, longitudeDelta: 0.40)
         )
     )
 
     var body: some View {
         Map(initialPosition: mapPosition) {
-            MapPolyline(coordinates: Self.carCoordinates)
-                .stroke(Color(red: 0.70, green: 0.14, blue: 0.16), lineWidth: 10)
+            ForEach(routeOverlays) { overlay in
+                if overlay.dashed {
+                    MapPolyline(coordinates: overlay.coordinates)
+                        .stroke(overlay.color, style: StrokeStyle(lineWidth: overlay.lineWidth, lineCap: .round, dash: [6, 5]))
+                } else {
+                    MapPolyline(coordinates: overlay.coordinates)
+                        .stroke(overlay.color, lineWidth: overlay.lineWidth)
+                }
+            }
 
-            MapPolyline(coordinates: Self.station1Coordinates)
-                .stroke(Color(red: 0.12, green: 0.28, blue: 0.63), style: StrokeStyle(lineWidth: 10, lineCap: .round, dash: [8, 6]))
-
-            MapPolyline(coordinates: Self.station2Coordinates)
-                .stroke(Color(red: 0.10, green: 0.44, blue: 0.20), style: StrokeStyle(lineWidth: 10, lineCap: .round, dash: [4, 6]))
-
-            Annotation("Start", coordinate: Self.station1Coordinates.first ?? Self.sfCenter) {
+            Annotation("San Francisco Caltrain", coordinate: Self.sfCaltrain) {
                 mapPin(color: .white)
             }
-            Annotation("Station 1", coordinate: Self.station1Coordinates[2]) {
-                mapPin(color: .blue)
-            }
-            Annotation("Station 2", coordinate: Self.station2Coordinates[2]) {
-                mapPin(color: .green)
-            }
-            Annotation("Destination", coordinate: Self.station2Coordinates.last ?? Self.sfCenter) {
+            Annotation("Palo Alto Caltrain", coordinate: Self.paloAltoCaltrain) {
                 mapPin(color: .red)
             }
         }
         .mapStyle(.standard(elevation: .realistic))
+        .task {
+            await loadRoutes()
+        }
     }
 
     private func mapPin(color: Color) -> some View {
@@ -393,6 +382,63 @@ private struct RealMapBackground: View {
             .overlay {
                 Circle().stroke(.black.opacity(0.35), lineWidth: 1)
             }
+    }
+
+    private func loadRoutes() async {
+        let source = MKMapItem(placemark: MKPlacemark(coordinate: Self.sfCaltrain))
+        let destination = MKMapItem(placemark: MKPlacemark(coordinate: Self.paloAltoCaltrain))
+
+        var overlays: [RouteOverlay] = []
+
+        // Car route
+        do {
+            let carRequest = MKDirections.Request()
+            carRequest.source = source
+            carRequest.destination = destination
+            carRequest.transportType = .automobile
+            let carResponse = try await MKDirections(request: carRequest).calculate()
+            if let route = carResponse.routes.first {
+                overlays.append(
+                    RouteOverlay(
+                        id: "car",
+                        coordinates: route.polyline.coordinates,
+                        color: Color(red: 0.70, green: 0.14, blue: 0.16),
+                        dashed: false,
+                        lineWidth: 9
+                    )
+                )
+            }
+        } catch {
+            // Keep going; transit routes may still be available.
+        }
+
+        // Transit routes (primary + alternate from same response to guarantee green exists).
+        // Transit overlays intentionally disabled for now.
+
+        if overlays.isEmpty {
+            overlays = [
+                RouteOverlay(
+                    id: "fallback",
+                    coordinates: [Self.sfCaltrain, Self.paloAltoCaltrain],
+                    color: Color(red: 0.70, green: 0.14, blue: 0.16),
+                    dashed: false,
+                    lineWidth: 9
+                )
+            ]
+        }
+
+        routeOverlays = overlays
+    }
+}
+
+private extension MKPolyline {
+    var coordinates: [CLLocationCoordinate2D] {
+        var coords = Array(
+            repeating: CLLocationCoordinate2D(latitude: 0, longitude: 0),
+            count: pointCount
+        )
+        getCoordinates(&coords, range: NSRange(location: 0, length: pointCount))
+        return coords
     }
 }
 
