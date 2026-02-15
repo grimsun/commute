@@ -49,6 +49,18 @@ public struct DashboardView: View {
                     RealMapBackground()
                         .ignoresSafeArea()
 
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.043, green: 0.071, blue: 0.125).opacity(0.16),
+                            .clear,
+                            Color(red: 0.043, green: 0.071, blue: 0.125).opacity(0.10)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+
                     pinnedTopControls
                         .padding(.top, 4)
                         .padding(.horizontal, 14)
@@ -152,32 +164,30 @@ public struct DashboardView: View {
             } label: {
                 Image(systemName: "arrow.left.arrow.right")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color(red: 0.059, green: 0.090, blue: 0.165))
                     .frame(width: 44, height: 44)
                     .background {
                         Circle()
-                            .fill(.ultraThinMaterial)
-                            .opacity(0.82)
+                            .fill(Color.white.opacity(0.72))
                     }
                     .overlay {
-                        Circle().stroke(.white.opacity(0.22), lineWidth: 1)
+                        Circle().stroke(.white.opacity(0.28), lineWidth: 1)
                     }
             }
 
             Text(directionLabel)
                 .font(.headline.weight(.semibold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color(red: 0.059, green: 0.090, blue: 0.165))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
                 .padding(.horizontal, 14)
                 .background {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .opacity(0.82)
+                        .fill(Color.white.opacity(0.72))
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(.white.opacity(0.18), lineWidth: 1)
+                        .stroke(.white.opacity(0.28), lineWidth: 1)
                 }
 
             Button {
@@ -185,15 +195,14 @@ public struct DashboardView: View {
             } label: {
                 Image(systemName: "gearshape.fill")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color(red: 0.059, green: 0.090, blue: 0.165))
                     .frame(width: 44, height: 44)
                     .background {
                         Circle()
-                            .fill(.ultraThinMaterial)
-                            .opacity(0.82)
+                            .fill(Color.white.opacity(0.72))
                     }
                     .overlay {
-                        Circle().stroke(.white.opacity(0.22), lineWidth: 1)
+                        Circle().stroke(.white.opacity(0.28), lineWidth: 1)
                     }
             }
         }
@@ -304,7 +313,7 @@ public struct DashboardView: View {
                 subtitle: plan.carOption.isTrafficGood ? "Traffic is good" : "Traffic is heavy",
                 detail: plan.carOption.reason,
                 etaMinutes: Int(plan.carOption.eta / 60),
-                accent: Color(red: 0.70, green: 0.14, blue: 0.16)
+                accent: Color(red: 0.86, green: 0.22, blue: 0.18)
             ),
             RouteCardModel(
                 id: "station1",
@@ -312,7 +321,7 @@ public struct DashboardView: View {
                 subtitle: "Train \(plan.multimodalOption.selectedTrain.tripId)",
                 detail: "Depart \(plan.multimodalOption.selectedTrain.departureTime.formatted(date: .omitted, time: .shortened))",
                 etaMinutes: Int(plan.multimodalOption.selectedTrain.arrivalTime.timeIntervalSince(plan.generatedAt) / 60),
-                accent: Color(red: 0.12, green: 0.28, blue: 0.63)
+                accent: Color(red: 0.12, green: 0.44, blue: 0.92)
             ),
             RouteCardModel(
                 id: "station2",
@@ -320,7 +329,7 @@ public struct DashboardView: View {
                 subtitle: plan.multimodalOption.fallbackTrain.map { "Fallback \($0.tripId)" } ?? "Alternative route",
                 detail: "Too late at \(plan.multimodalOption.attemptTimes.tooLateAt.formatted(date: .omitted, time: .shortened))",
                 etaMinutes: plan.multimodalOption.fallbackTrain.map { Int($0.arrivalTime.timeIntervalSince(plan.generatedAt) / 60) } ?? Int(plan.multimodalOption.selectedTrain.arrivalTime.timeIntervalSince(plan.generatedAt) / 60) + 8,
-                accent: Color(red: 0.10, green: 0.44, blue: 0.20)
+                accent: Color(red: 0.09, green: 0.64, blue: 0.29)
             )
         ]
     }
@@ -363,10 +372,10 @@ private struct RealMapBackground: View {
             }
 
             Annotation("San Francisco Caltrain", coordinate: Self.sfCaltrain) {
-                mapPin(color: .white)
+                mapPin(color: Color(red: 0.12, green: 0.44, blue: 0.92))
             }
             Annotation("Palo Alto Caltrain", coordinate: Self.paloAltoCaltrain) {
-                mapPin(color: .red)
+                mapPin(color: Color(red: 0.86, green: 0.22, blue: 0.18))
             }
         }
         .mapStyle(.standard(elevation: .realistic))
@@ -402,7 +411,7 @@ private struct RealMapBackground: View {
                     RouteOverlay(
                         id: "car",
                         coordinates: route.polyline.coordinates,
-                        color: Color(red: 0.70, green: 0.14, blue: 0.16),
+                        color: Color(red: 0.86, green: 0.22, blue: 0.18),
                         dashed: false,
                         lineWidth: 9
                     )
@@ -420,7 +429,7 @@ private struct RealMapBackground: View {
                 RouteOverlay(
                     id: "fallback",
                     coordinates: [Self.sfCaltrain, Self.paloAltoCaltrain],
-                    color: Color(red: 0.70, green: 0.14, blue: 0.16),
+                    color: Color(red: 0.86, green: 0.22, blue: 0.18),
                     dashed: false,
                     lineWidth: 9
                 )
@@ -557,11 +566,11 @@ private struct WalletRouteCard: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(route.title)
-                        .font(.headline)
+                        .font(expanded ? .headline : .title3.weight(.bold))
                         .foregroundStyle(.white)
                         .lineLimit(expanded ? 3 : 2)
                     Text(route.subtitle)
-                        .font(.caption)
+                        .font(expanded ? .caption : .subheadline.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.92))
                 }
 
@@ -569,10 +578,10 @@ private struct WalletRouteCard: View {
 
                 VStack(alignment: .trailing, spacing: 0) {
                     Text("\(route.etaMinutes)")
-                        .font(expanded ? .system(size: 34, weight: .bold) : .title.bold())
+                        .font(expanded ? .system(size: 34, weight: .bold) : .system(size: 40, weight: .black))
                         .foregroundStyle(.white)
                     Text("min")
-                        .font(.caption2)
+                        .font(expanded ? .caption2 : .caption.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.9))
                 }
             }
