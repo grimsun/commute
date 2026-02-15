@@ -22,6 +22,9 @@ public struct DashboardView: View {
     @State private var didEvaluateCurrentDrag = false
     @State private var dragStartedWithListAtTop = false
     @State private var dragStartPanelState: PanelState = .collapsed
+    @State private var transitDebugLines: [String] = []
+    @State private var transitDebugLoading = false
+    @State private var transitDebugError: String?
 
     public init(viewModel: DashboardViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -316,12 +319,17 @@ public struct DashboardView: View {
 
     private var settingsSheet: some View {
         NavigationStack {
-            VStack(spacing: 14) {
-                settingsControls
-                Spacer()
+            ScrollView {
+                VStack(spacing: 14) {
+                    settingsControls
+                    transitDebugSection
+                }
+                .padding()
             }
-            .padding()
             .navigationTitle("Settings")
+            .task {
+                await loadTransitDebugResults()
+            }
         }
     }
 
@@ -345,6 +353,180 @@ public struct DashboardView: View {
         .padding(12)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var transitDebugSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Transit Results")
+                    .font(.headline)
+                Spacer()
+                if transitDebugLoading {
+                    ProgressView()
+                        .scaleEffect(0.85)
+                }
+                Button("Reload") {
+                    Task {
+                        await loadTransitDebugResults()
+                    }
+                }
+                .buttonStyle(.bordered)
+            }
+
+            Text("Ferry Building SF → Stanford University")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            if let transitDebugError {
+                Text(transitDebugError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            } else if transitDebugLines.isEmpty, transitDebugLoading {
+                Text("Loading transit routes...")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if transitDebugLines.isEmpty {
+                Text("No transit routes returned.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(transitDebugLines.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .font(.footnote)
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(8)
+                            .background(Color.white.opacity(0.55))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func loadTransitDebugResults() async {
+        if transitDebugLoading { return }
+        transitDebugLoading = true
+        transitDebugError = nil
+        transitDebugLines = []
+
+        do {
+            let sourceItem = try await resolveMapItem(
+                query: "Ferry Building, San Francisco",
+                regionCenter: CLLocationCoordinate2D(latitude: 37.7955, longitude: -122.3937)
+            )
+            let destinationItem = try await resolveMapItem(
+                query: "Stanford University",
+                regionCenter: CLLocationCoordinate2D(latitude: 37.4275, longitude: -122.1697)
+            )
+
+            let response = try await queryTransitRoutes(
+                source: sourceItem,
+                destination: destinationItem
+            )
+            let lines = response.routes.enumerated().map { idx, route in
+                let etaMin = Int(route.expectedTravelTime / 60)
+                let distanceKm = route.distance / 1000
+                let firstSteps = route.steps
+                    .prefix(3)
+                    .map { $0.instructions.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " | ")
+
+                return "\(idx + 1). ETA \(etaMin)m, \(String(format: "%.1f", distanceKm))km, \(route.name.isEmpty ? "Transit route" : route.name)\(firstSteps.isEmpty ? "" : " — \(firstSteps)")"
+            }
+
+            transitDebugLines = lines
+            if lines.isEmpty {
+                transitDebugError = "No transit itineraries were returned for this query."
+            }
+        } catch {
+            let nsError = error as NSError
+            transitDebugError = "Transit query failed (\(nsError.domain) \(nsError.code)): \(nsError.localizedDescription)"
+        }
+
+        transitDebugLoading = false
+    }
+
+    private func queryTransitRoutes(
+        source: MKMapItem,
+        destination: MKMapItem
+    ) async throws -> MKDirections.Response {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Los_Angeles") ?? .current
+        let now = Date()
+        let nextWeekday8am = nextWeekdayMorning8am(from: now, calendar: calendar)
+        let departureCandidates = [nextWeekday8am, now]
+
+        for departureDate in departureCandidates {
+            // First attempt with alternates, then retry simple transit request.
+            for wantsAlternates in [true, false] {
+                let request = MKDirections.Request()
+                request.source = source
+                request.destination = destination
+                request.transportType = .transit
+                request.requestsAlternateRoutes = wantsAlternates
+                request.departureDate = departureDate
+
+                do {
+                    let response = try await MKDirections(request: request).calculate()
+                    if !response.routes.isEmpty {
+                        return response
+                    }
+                } catch {
+                    if wantsAlternates {
+                        continue
+                    }
+                }
+            }
+        }
+
+        throw NSError(
+            domain: "TransitQuery",
+            code: -1,
+            userInfo: [NSLocalizedDescriptionKey: "No transit routes returned by MapKit for next weekday 8:00 AM or current time (America/Los_Angeles)."]
+        )
+    }
+
+    private func nextWeekdayMorning8am(from date: Date, calendar: Calendar) -> Date {
+        let weekday = calendar.component(.weekday, from: date)
+        let isWeekend = weekday == 1 || weekday == 7 // Sunday/Saturday
+        let baseDate = isWeekend
+            ? calendar.date(byAdding: .day, value: weekday == 7 ? 2 : 1, to: date) ?? date
+            : date
+
+        return calendar.date(
+            bySettingHour: 8,
+            minute: 0,
+            second: 0,
+            of: baseDate
+        ) ?? date
+    }
+
+    private func resolveMapItem(
+        query: String,
+        regionCenter: CLLocationCoordinate2D
+    ) async throws -> MKMapItem {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        request.region = MKCoordinateRegion(
+            center: regionCenter,
+            span: MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15)
+        )
+        let response = try await MKLocalSearch(request: request).start()
+        if let first = response.mapItems.first {
+            return first
+        }
+        throw NSError(
+            domain: "TransitQuery",
+            code: -2,
+            userInfo: [NSLocalizedDescriptionKey: "No map item found for '\(query)'"]
+        )
     }
 
     @ViewBuilder
