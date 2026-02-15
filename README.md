@@ -1,20 +1,58 @@
-# Commute Phase 1
+# Commute
 
-Phase 1 implements the core architecture and mocked end-to-end planning flow:
+Commute is an iOS app for planning trips between home and work.
 
-- `Sources/CommuteKit/Domain`: models, protocols, planner logic.
-- `Sources/CommuteKit/Data`: mock providers and in-memory profile store.
-- `Sources/CommuteKit/Presentation`: dashboard view model and SwiftUI views.
-- `Tests/CommuteKitTests`: planner unit tests.
+It compares two commute options:
+- Car
+- Bike + Train + Bike
 
-## Run tests
+The app is designed to help decide:
+- when traffic is good enough to drive
+- what the next feasible train is
+- when to start getting ready
+- when to leave
+- when it is too late for the current train and you should take the next one
+
+It also supports notification-oriented planning with three key attempt times:
+- Get ready
+- Leave now
+- Too late (roll to next train)
+
+## Current Status
+
+Phase 1 is implemented:
+- project foundation and architecture layers (`Domain`, `Data`, `Presentation`)
+- core planning models and protocols
+- mocked planner and mocked providers
+- SwiftUI dashboard and timeline UI
+- unit tests for planner behavior
+
+## Project Structure
+
+- `CommuteApp/`: iOS app target (SwiftUI)
+- `Sources/CommuteKit/`: core app library
+  - `Domain/`: business models, rules, planner
+  - `Data/`: providers and storage abstractions (mock implementations in Phase 1)
+  - `Presentation/`: view models and SwiftUI views
+- `Tests/CommuteKitTests/`: planner tests
+
+## Run
+
+### In Xcode (recommended)
+
+1. Open `CommuteApp/CommuteApp.xcodeproj`.
+2. Ensure local package dependency points to this repository and includes product `CommuteKit`.
+3. Select an iPhone simulator.
+4. Run with `Cmd+R`.
+
+### Tests
 
 ```bash
 swift test
 ```
 
-## Open in Xcode
+## Roadmap
 
-1. Open `Package.swift` in Xcode.
-2. Use SwiftUI previews for `DashboardView`.
-3. For a full iOS app target, create an iOS App in Xcode and import `CommuteKit`.
+- Phase 2: real Apple Maps traffic/bike adapters + GTFS train feed integration
+- Phase 3: notification scheduling engine and background refresh behavior
+- Phase 4: hardening, broader tests, stale-data UX, telemetry hooks
