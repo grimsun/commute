@@ -3,6 +3,8 @@ import MapKit
 import SwiftUI
 
 public struct DashboardView: View {
+    private static let mockRouteCount = 3
+
     private enum PanelState {
         case expanded
         case collapsed
@@ -15,6 +17,11 @@ public struct DashboardView: View {
     @State private var expandedRouteID: String?
     @State private var dragTranslation: CGFloat = 0
     @State private var isDraggingSheet = false
+    @State private var isSheetDragActive = false
+    @State private var isListAtTop = true
+    @State private var didEvaluateCurrentDrag = false
+    @State private var dragStartedWithListAtTop = false
+    @State private var dragStartPanelState: PanelState = .collapsed
 
     public init(viewModel: DashboardViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -23,7 +30,7 @@ public struct DashboardView: View {
     public var body: some View {
         NavigationStack {
             GeometryReader { proxy in
-                let routeCount = 3
+                let routeCount = Self.mockRouteCount
                 let sheetHeight = proxy.size.height * 0.82
                 let maxExpandedTop = proxy.size.height * 0.22
                 let expandedListHeight = WalletRouteList.listHeight(routeCount: routeCount)
@@ -75,25 +82,67 @@ public struct DashboardView: View {
                                 transaction.animation = nil
                             }
                         }
-                        .highPriorityGesture(
+                        .simultaneousGesture(
                             DragGesture()
                                 .onChanged { value in
+                                    if !didEvaluateCurrentDrag {
+                                        didEvaluateCurrentDrag = true
+                                        dragStartedWithListAtTop = isListAtTop
+                                        dragStartPanelState = panelState
+                                    }
+
+                                    if !isSheetDragActive {
+                                        // In expanded mode, allow:
+                                        // 1) explicit top-grab drags, or
+                                        // 2) a new downward pull that started while list is already at top.
+                                        let startedInGrabZone = value.startLocation.y <= 44
+                                        let pullDownFromTop = panelState == .expanded
+                                            && dragStartedWithListAtTop
+                                            && value.translation.height > 24
+                                        isSheetDragActive = panelState != .expanded || startedInGrabZone || pullDownFromTop
+                                    }
+                                    guard isSheetDragActive else { return }
+
                                     if !isDraggingSheet {
                                         isDraggingSheet = true
                                     }
                                     dragTranslation = value.translation.height
                                 }
                                 .onEnded { value in
+                                    guard isSheetDragActive else {
+                                        isDraggingSheet = false
+                                        isSheetDragActive = false
+                                        dragTranslation = 0
+                                        didEvaluateCurrentDrag = false
+                                        dragStartedWithListAtTop = false
+                                        return
+                                    }
                                     let proposed = clampedTop(
                                         anchoredTop + value.predictedEndTranslation.height,
                                         minTop: expandedTop,
                                         maxTop: hiddenTop
                                     )
-                                    let targets: [(PanelState, CGFloat)] = [
-                                        (.expanded, expandedTop),
-                                        (.collapsed, collapsedTop),
-                                        (.hidden, hiddenTop)
-                                    ]
+                                    let targets: [(PanelState, CGFloat)]
+                                    switch dragStartPanelState {
+                                    case .expanded:
+                                        // Do not allow skipping directly to hidden in one gesture.
+                                        targets = [
+                                            (.expanded, expandedTop),
+                                            (.collapsed, collapsedTop)
+                                        ]
+                                    case .collapsed:
+                                        targets = [
+                                            (.expanded, expandedTop),
+                                            (.collapsed, collapsedTop),
+                                            (.hidden, hiddenTop)
+                                        ]
+                                    case .hidden:
+                                        // Do not allow skipping directly to expanded in one gesture.
+                                        targets = [
+                                            (.collapsed, collapsedTop),
+                                            (.hidden, hiddenTop)
+                                        ]
+                                    }
                                     let nearest = targets.min {
                                         abs($0.1 - proposed) < abs($1.1 - proposed)
                                     }?.0 ?? .collapsed
@@ -101,6 +150,10 @@ public struct DashboardView: View {
                                         panelState = nearest
                                         dragTranslation = 0
                                         isDraggingSheet = false
+                                        isSheetDragActive = false
+                                        didEvaluateCurrentDrag = false
+                                        dragStartedWithListAtTop = false
+                                        dragStartPanelState = nearest
                                     }
                                 }
                         )
@@ -224,11 +277,24 @@ public struct DashboardView: View {
     private var panelSheet: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 12) {
+                GeometryReader { geo in
+                    Color.clear
+                        .preference(
+                            key: PanelScrollOffsetPreferenceKey.self,
+                            value: geo.frame(in: .named("panelScroll")).minY
+                        )
+                }
+                .frame(height: 0)
+
                 content
             }
             .padding(.horizontal, 8)
             .padding(.top, 10)
             .padding(.bottom, 12)
+        }
+        .coordinateSpace(name: "panelScroll")
+        .onPreferenceChange(PanelScrollOffsetPreferenceKey.self) { offset in
+            isListAtTop = offset >= -1
         }
         .scrollDisabled(panelState != .expanded)
     }
@@ -332,6 +398,14 @@ public struct DashboardView: View {
                 accent: Color(red: 0.09, green: 0.64, blue: 0.29)
             )
         ]
+    }
+}
+
+private struct PanelScrollOffsetPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
