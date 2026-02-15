@@ -24,8 +24,8 @@ public struct DashboardView: View {
         NavigationStack {
             GeometryReader { proxy in
                 let sheetHeight = proxy.size.height * 0.82
-                let expandedTop = proxy.size.height * 0.14
-                let collapsedCardsHeight = WalletRouteList.collapsedHeight(routeCount: 3)
+                let expandedTop = proxy.size.height * 0.33
+                let collapsedCardsHeight = WalletRouteList.collapsedStackHeight(routeCount: 3)
                 let collapsedVisibleHeight = collapsedCardsHeight + 48 + proxy.safeAreaInsets.bottom
                 let collapsedTop = max(expandedTop + 56, proxy.size.height - collapsedVisibleHeight + 18)
                 let hiddenTop = proxy.size.height + 32
@@ -125,6 +125,9 @@ public struct DashboardView: View {
             .sheet(isPresented: $isSettingsPresented) {
                 settingsSheet
                     .presentationDetents([.medium, .large])
+            }
+            .onChange(of: panelState) { _, _ in
+                expandedRouteID = nil
             }
 #if os(iOS)
             .toolbar(.hidden, for: .navigationBar)
@@ -282,7 +285,8 @@ public struct DashboardView: View {
         case let .loaded(plan):
             WalletRouteList(
                 routes: routes(from: plan),
-                expandedRouteID: $expandedRouteID
+                expandedRouteID: $expandedRouteID,
+                displayMode: panelState == .expanded ? .list : .stack
             )
         }
     }
@@ -295,7 +299,7 @@ public struct DashboardView: View {
                 subtitle: plan.carOption.isTrafficGood ? "Traffic is good" : "Traffic is heavy",
                 detail: plan.carOption.reason,
                 etaMinutes: Int(plan.carOption.eta / 60),
-                accent: Color(red: 0.98, green: 0.46, blue: 0.10)
+                accent: Color(red: 0.70, green: 0.14, blue: 0.16)
             ),
             RouteCardModel(
                 id: "station1",
@@ -303,7 +307,7 @@ public struct DashboardView: View {
                 subtitle: "Train \(plan.multimodalOption.selectedTrain.tripId)",
                 detail: "Depart \(plan.multimodalOption.selectedTrain.departureTime.formatted(date: .omitted, time: .shortened))",
                 etaMinutes: Int(plan.multimodalOption.selectedTrain.arrivalTime.timeIntervalSince(plan.generatedAt) / 60),
-                accent: Color(red: 0.13, green: 0.46, blue: 0.96)
+                accent: Color(red: 0.12, green: 0.28, blue: 0.63)
             ),
             RouteCardModel(
                 id: "station2",
@@ -311,7 +315,7 @@ public struct DashboardView: View {
                 subtitle: plan.multimodalOption.fallbackTrain.map { "Fallback \($0.tripId)" } ?? "Alternative route",
                 detail: "Too late at \(plan.multimodalOption.attemptTimes.tooLateAt.formatted(date: .omitted, time: .shortened))",
                 etaMinutes: plan.multimodalOption.fallbackTrain.map { Int($0.arrivalTime.timeIntervalSince(plan.generatedAt) / 60) } ?? Int(plan.multimodalOption.selectedTrain.arrivalTime.timeIntervalSince(plan.generatedAt) / 60) + 8,
-                accent: Color(red: 0.14, green: 0.72, blue: 0.26)
+                accent: Color(red: 0.10, green: 0.44, blue: 0.20)
             )
         ]
     }
@@ -353,13 +357,13 @@ private struct RealMapBackground: View {
     var body: some View {
         Map(initialPosition: mapPosition) {
             MapPolyline(coordinates: Self.carCoordinates)
-                .stroke(.orange, lineWidth: 10)
+                .stroke(Color(red: 0.70, green: 0.14, blue: 0.16), lineWidth: 10)
 
             MapPolyline(coordinates: Self.station1Coordinates)
-                .stroke(.blue, style: StrokeStyle(lineWidth: 10, lineCap: .round, dash: [8, 6]))
+                .stroke(Color(red: 0.12, green: 0.28, blue: 0.63), style: StrokeStyle(lineWidth: 10, lineCap: .round, dash: [8, 6]))
 
             MapPolyline(coordinates: Self.station2Coordinates)
-                .stroke(.green, style: StrokeStyle(lineWidth: 10, lineCap: .round, dash: [4, 6]))
+                .stroke(Color(red: 0.10, green: 0.44, blue: 0.20), style: StrokeStyle(lineWidth: 10, lineCap: .round, dash: [4, 6]))
 
             Annotation("Start", coordinate: Self.station1Coordinates.first ?? Self.sfCenter) {
                 mapPin(color: .white)
@@ -397,57 +401,86 @@ private struct RouteCardModel: Identifiable {
 }
 
 private struct WalletRouteList: View {
+    enum DisplayMode {
+        case stack
+        case list
+    }
+
     let routes: [RouteCardModel]
     @Binding var expandedRouteID: String?
+    let displayMode: DisplayMode
 
-    private static let collapsedSpacing: CGFloat = 62
+    private static let rowSpacing: CGFloat = 10
+    private static let stackSpacing: CGFloat = 62
     private static let collapsedCardHeight: CGFloat = 120
 
-    static func collapsedHeight(routeCount: Int) -> CGFloat {
-        (collapsedSpacing * CGFloat(max(routeCount - 1, 0))) + collapsedCardHeight
+    static func collapsedStackHeight(routeCount: Int) -> CGFloat {
+        (stackSpacing * CGFloat(max(routeCount - 1, 0))) + collapsedCardHeight
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            ForEach(Array(routes.enumerated()), id: \.element.id) { index, route in
-                let selectedIndex = routes.firstIndex(where: { $0.id == expandedRouteID })
-                let isExpanded = expandedRouteID == route.id
-
-                WalletRouteCard(
-                    route: route,
-                    expanded: isExpanded
-                )
-                .offset(y: cardOffset(for: index, selectedIndex: selectedIndex, isExpanded: isExpanded))
-                .opacity(cardOpacity(for: index, selectedIndex: selectedIndex))
-                .scaleEffect(isExpanded ? 1.0 : 0.98)
-                .zIndex(zIndex(for: index, isExpanded: isExpanded))
-                .onTapGesture {
-                    withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
-                        expandedRouteID = expandedRouteID == route.id ? nil : route.id
+        switch displayMode {
+        case .list:
+            VStack(spacing: Self.rowSpacing) {
+                ForEach(routes) { route in
+                    let isExpanded = expandedRouteID == route.id
+                    WalletRouteCard(
+                        route: route,
+                        expanded: isExpanded
+                    )
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                            expandedRouteID = expandedRouteID == route.id ? nil : route.id
+                        }
                     }
                 }
             }
+            .frame(maxWidth: .infinity)
+            .animation(.spring(response: 0.34, dampingFraction: 0.86), value: expandedRouteID)
+
+        case .stack:
+            ZStack(alignment: .top) {
+                ForEach(Array(routes.enumerated()), id: \.element.id) { index, route in
+                    let selectedIndex = routes.firstIndex(where: { $0.id == expandedRouteID })
+                    let isExpanded = expandedRouteID == route.id
+
+                    WalletRouteCard(
+                        route: route,
+                        expanded: isExpanded
+                    )
+                    .offset(y: stackCardOffset(for: index, selectedIndex: selectedIndex, isExpanded: isExpanded))
+                    .opacity(stackCardOpacity(for: index, selectedIndex: selectedIndex))
+                    .scaleEffect(isExpanded ? 1.0 : 0.98)
+                    .zIndex(stackZIndex(for: index, isExpanded: isExpanded))
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+                            expandedRouteID = expandedRouteID == route.id ? nil : route.id
+                        }
+                    }
+                }
+            }
+            .frame(height: stackContainerHeight)
+            .frame(maxWidth: .infinity)
+            .animation(.spring(response: 0.42, dampingFraction: 0.86), value: expandedRouteID)
         }
-        .frame(height: containerHeight)
-        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: expandedRouteID)
     }
 
-    private var containerHeight: CGFloat {
-        expandedRouteID == nil ? Self.collapsedHeight(routeCount: routes.count) : 240
+    private var stackContainerHeight: CGFloat {
+        expandedRouteID == nil ? Self.collapsedStackHeight(routeCount: routes.count) : 240
     }
 
-    private func cardOffset(for index: Int, selectedIndex: Int?, isExpanded: Bool) -> CGFloat {
-        guard let selectedIndex else { return CGFloat(index) * Self.collapsedSpacing }
+    private func stackCardOffset(for index: Int, selectedIndex: Int?, isExpanded: Bool) -> CGFloat {
+        guard let selectedIndex else { return CGFloat(index) * Self.stackSpacing }
         if isExpanded { return 8 }
         return index < selectedIndex ? -290 : 310
     }
 
-    private func cardOpacity(for index: Int, selectedIndex: Int?) -> Double {
+    private func stackCardOpacity(for index: Int, selectedIndex: Int?) -> Double {
         guard let selectedIndex else { return 1 }
         return index == selectedIndex ? 1 : 0.04
     }
 
-    private func zIndex(for index: Int, isExpanded: Bool) -> Double {
+    private func stackZIndex(for index: Int, isExpanded: Bool) -> Double {
         if isExpanded { return 999 }
         return Double(routes.count - index)
     }
