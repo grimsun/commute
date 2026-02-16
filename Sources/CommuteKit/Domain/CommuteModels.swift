@@ -32,6 +32,10 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
     public var id: UUID
     public var homeAddress: String
     public var workAddress: String
+    public var homeLatitude: Double?
+    public var homeLongitude: Double?
+    public var workLatitude: Double?
+    public var workLongitude: Double?
     public var homeStation: String
     public var workStation: String
     public var trainLine: String
@@ -45,6 +49,10 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         id: UUID = UUID(),
         homeAddress: String,
         workAddress: String,
+        homeLatitude: Double? = nil,
+        homeLongitude: Double? = nil,
+        workLatitude: Double? = nil,
+        workLongitude: Double? = nil,
         homeStation: String,
         workStation: String,
         trainLine: String,
@@ -57,6 +65,10 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         self.id = id
         self.homeAddress = homeAddress
         self.workAddress = workAddress
+        self.homeLatitude = homeLatitude
+        self.homeLongitude = homeLongitude
+        self.workLatitude = workLatitude
+        self.workLongitude = workLongitude
         self.homeStation = homeStation
         self.workStation = workStation
         self.trainLine = trainLine

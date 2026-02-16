@@ -4,11 +4,38 @@ import SwiftUI
 
 public struct DashboardView: View {
     private static let mockRouteCount = 3
+    private static let defaultHomeCoordinate = CLLocationCoordinate2D(latitude: 37.7764, longitude: -122.3946)
+    private static let defaultWorkCoordinate = CLLocationCoordinate2D(latitude: 37.4436, longitude: -122.1651)
 
     private enum PanelState {
         case expanded
         case collapsed
         case hidden
+    }
+
+    enum AddressTarget: String, Identifiable {
+        case home
+        case work
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .home:
+                "Home"
+            case .work:
+                "Work"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .home:
+                "house.fill"
+            case .work:
+                "briefcase.fill"
+            }
+        }
     }
 
     @State private var viewModel: DashboardViewModel
@@ -22,6 +49,14 @@ public struct DashboardView: View {
     @State private var didEvaluateCurrentDrag = false
     @State private var dragStartedWithListAtTop = false
     @State private var dragStartPanelState: PanelState = .collapsed
+    @State private var homeAddressDraft = ""
+    @State private var workAddressDraft = ""
+    @State private var activeAddressPicker: AddressTarget?
+    @State private var isSavingAddresses = false
+    @State private var addressSaveMessage: String?
+    @State private var addressSaveError: String?
+    @State private var mapSourceCoordinate = DashboardView.defaultHomeCoordinate
+    @State private var mapDestinationCoordinate = DashboardView.defaultWorkCoordinate
     @State private var transitDebugLines: [String] = []
     @State private var transitDebugLoading = false
     @State private var transitDebugError: String?
@@ -56,7 +91,10 @@ public struct DashboardView: View {
                 )
 
                 ZStack(alignment: .top) {
-                    RealMapBackground()
+                    RealMapBackground(
+                        sourceCoordinate: mapSourceCoordinate,
+                        destinationCoordinate: mapDestinationCoordinate
+                    )
                         .ignoresSafeArea()
 
                     LinearGradient(
@@ -186,13 +224,19 @@ public struct DashboardView: View {
             }
             .task {
                 let profile = CommuteProfile(
-                    homeAddress: "Home",
-                    workAddress: "Work",
+                    homeAddress: "San Francisco Caltrain",
+                    workAddress: "Palo Alto Caltrain",
+                    homeLatitude: Self.defaultHomeCoordinate.latitude,
+                    homeLongitude: Self.defaultHomeCoordinate.longitude,
+                    workLatitude: Self.defaultWorkCoordinate.latitude,
+                    workLongitude: Self.defaultWorkCoordinate.longitude,
                     homeStation: "Station 1",
                     workStation: "Station 2",
                     trainLine: "Blue"
                 )
                 await viewModel.bootstrap(defaultProfile: profile)
+                applyProfileCoordinatesIfAvailable()
+                loadAddressDraftsFromProfile()
                 await viewModel.refreshPlan()
             }
             .sheet(isPresented: $isSettingsPresented) {
@@ -321,6 +365,7 @@ public struct DashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
+                    addressSettingsSection
                     settingsControls
                     transitDebugSection
                 }
@@ -328,9 +373,100 @@ public struct DashboardView: View {
             }
             .navigationTitle("Settings")
             .task {
+                loadAddressDraftsFromProfile()
                 await loadTransitDebugResults()
             }
+            .sheet(item: $activeAddressPicker) { target in
+                AddressTypeaheadSheet(
+                    target: target,
+                    regionCenter: target == .home ? mapSourceCoordinate : mapDestinationCoordinate
+                ) { mapItem in
+                    await selectAddress(mapItem, for: target)
+                    activeAddressPicker = nil
+                }
+            }
         }
+    }
+
+    @ViewBuilder
+    private var addressSettingsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Commute Addresses")
+                .font(.headline)
+
+            addressPickerRow(
+                target: .home,
+                label: homeAddressDraft.isEmpty ? "Set home address" : homeAddressDraft
+            )
+
+            addressPickerRow(
+                target: .work,
+                label: workAddressDraft.isEmpty ? "Set work address" : workAddressDraft
+            )
+
+            if let addressSaveError {
+                Text(addressSaveError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            } else if let addressSaveMessage {
+                Text(addressSaveMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.green)
+            }
+
+            if isSavingAddresses {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Updating route...")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(12)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func addressPickerRow(target: AddressTarget, label: String) -> some View {
+        Button {
+            addressSaveError = nil
+            addressSaveMessage = nil
+            activeAddressPicker = target
+        } label: {
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(Color.white.opacity(0.82))
+                    .frame(width: 38, height: 38)
+                    .overlay {
+                        Image(systemName: target.icon)
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(Color(red: 0.059, green: 0.090, blue: 0.165))
+                    }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(target.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(label)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(10)
+            .background(Color.white.opacity(0.62))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 
     private var settingsControls: some View {
@@ -407,6 +543,61 @@ public struct DashboardView: View {
         .padding(12)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func loadAddressDraftsFromProfile() {
+        guard let profile = viewModel.currentProfile() else { return }
+        homeAddressDraft = profile.homeAddress
+        workAddressDraft = profile.workAddress
+        addressSaveError = nil
+        addressSaveMessage = nil
+    }
+
+    private func applyProfileCoordinatesIfAvailable() {
+        guard let profile = viewModel.currentProfile() else { return }
+        if let lat = profile.homeLatitude, let lon = profile.homeLongitude {
+            mapSourceCoordinate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        }
+        if let lat = profile.workLatitude, let lon = profile.workLongitude {
+            mapDestinationCoordinate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        }
+    }
+
+    private func selectAddress(_ mapItem: MKMapItem, for target: AddressTarget) async {
+        isSavingAddresses = true
+        addressSaveError = nil
+        addressSaveMessage = nil
+
+        let coordinate = mapItem.placemark.coordinate
+        let line = addressLine(for: mapItem, fallback: target.title)
+
+        if target == .home {
+            homeAddressDraft = line
+            mapSourceCoordinate = coordinate
+        } else {
+            workAddressDraft = line
+            mapDestinationCoordinate = coordinate
+        }
+
+        await persistAddressChanges()
+        addressSaveMessage = "\(target.title) updated."
+        await viewModel.refreshPlan()
+        isSavingAddresses = false
+    }
+
+    private func persistAddressChanges() async {
+        let trimmedHome = homeAddressDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedWork = workAddressDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedHome.isEmpty, !trimmedWork.isEmpty else { return }
+
+        await viewModel.updateAddresses(
+            homeAddress: trimmedHome,
+            workAddress: trimmedWork,
+            homeLatitude: mapSourceCoordinate.latitude,
+            homeLongitude: mapSourceCoordinate.longitude,
+            workLatitude: mapDestinationCoordinate.latitude,
+            workLongitude: mapDestinationCoordinate.longitude
+        )
     }
 
     private func loadTransitDebugResults() async {
@@ -529,6 +720,17 @@ public struct DashboardView: View {
         )
     }
 
+    private func addressLine(for item: MKMapItem, fallback: String) -> String {
+        let placemark = item.placemark
+        if let name = item.name, !name.isEmpty {
+            if let locality = placemark.locality, !locality.isEmpty {
+                return "\(name), \(locality)"
+            }
+            return name
+        }
+        return fallback
+    }
+
     @ViewBuilder
     private var content: some View {
         switch viewModel.loadState {
@@ -583,6 +785,102 @@ public struct DashboardView: View {
     }
 }
 
+private struct AddressTypeaheadSheet: View {
+    let target: DashboardView.AddressTarget
+    let regionCenter: CLLocationCoordinate2D
+    let onSelect: (MKMapItem) async -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var autocomplete = AddressAutocompleteModel()
+    @State private var query = ""
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if autocomplete.completions.isEmpty {
+                    VStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                        Text("Start typing an address")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List(autocomplete.completions.indices, id: \.self) { index in
+                        let completion = autocomplete.completions[index]
+                        Button {
+                            Task {
+                                await onSelect(completion)
+                                dismiss()
+                            }
+                        } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(completion.name ?? "Address")
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                let subtitle = completion.placemark.title ?? ""
+                                if !subtitle.isEmpty {
+                                    Text(subtitle)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .listStyle(.plain)
+                }
+            }
+            .navigationTitle("\(target.title) Address")
+            .searchable(text: $query, prompt: "Search address")
+            .onChange(of: query) { _, newValue in
+                autocomplete.update(query: newValue, around: regionCenter)
+            }
+        }
+    }
+}
+
+@MainActor
+private final class AddressAutocompleteModel: ObservableObject {
+    @Published var completions: [MKMapItem] = []
+
+    private var inFlightTask: Task<Void, Never>?
+
+    func update(query: String, around center: CLLocationCoordinate2D) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        inFlightTask?.cancel()
+        guard !trimmed.isEmpty else {
+            completions = []
+            return
+        }
+
+        inFlightTask = Task {
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            guard !Task.isCancelled else { return }
+
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = trimmed
+            request.resultTypes = .address
+            request.region = MKCoordinateRegion(
+                center: center,
+                span: MKCoordinateSpan(latitudeDelta: 0.45, longitudeDelta: 0.45)
+            )
+
+            do {
+                let response = try await MKLocalSearch(request: request).start()
+                guard !Task.isCancelled else { return }
+                completions = Array(response.mapItems.prefix(8))
+            } catch {
+                guard !Task.isCancelled else { return }
+                completions = []
+            }
+        }
+    }
+}
+
 private struct PanelScrollOffsetPreferenceKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
 
@@ -600,23 +898,14 @@ private struct RealMapBackground: View {
         let lineWidth: CGFloat
     }
 
-    private static let sfCaltrain = CLLocationCoordinate2D(latitude: 37.7764, longitude: -122.3946)
-    private static let paloAltoCaltrain = CLLocationCoordinate2D(latitude: 37.4436, longitude: -122.1651)
+    let sourceCoordinate: CLLocationCoordinate2D
+    let destinationCoordinate: CLLocationCoordinate2D
 
     @State private var routeOverlays: [RouteOverlay] = []
-
-    private let mapPosition = MapCameraPosition.region(
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(
-                latitude: (sfCaltrain.latitude + paloAltoCaltrain.latitude) / 2.0,
-                longitude: (sfCaltrain.longitude + paloAltoCaltrain.longitude) / 2.0
-            ),
-            span: MKCoordinateSpan(latitudeDelta: 0.45, longitudeDelta: 0.40)
-        )
-    )
+    @State private var mapPosition: MapCameraPosition = .automatic
 
     var body: some View {
-        Map(initialPosition: mapPosition) {
+        Map(position: $mapPosition) {
             ForEach(routeOverlays) { overlay in
                 if overlay.dashed {
                     MapPolyline(coordinates: overlay.coordinates)
@@ -627,16 +916,28 @@ private struct RealMapBackground: View {
                 }
             }
 
-            Annotation("San Francisco Caltrain", coordinate: Self.sfCaltrain) {
+            Annotation("Home", coordinate: sourceCoordinate) {
                 mapPin(color: Color(red: 0.12, green: 0.44, blue: 0.92))
             }
-            Annotation("Palo Alto Caltrain", coordinate: Self.paloAltoCaltrain) {
+            Annotation("Work", coordinate: destinationCoordinate) {
                 mapPin(color: Color(red: 0.86, green: 0.22, blue: 0.18))
             }
         }
         .mapStyle(.standard(elevation: .realistic))
         .task {
             await loadRoutes()
+        }
+        .onChange(of: sourceCoordinate.latitude) { _, _ in
+            Task { await loadRoutes() }
+        }
+        .onChange(of: sourceCoordinate.longitude) { _, _ in
+            Task { await loadRoutes() }
+        }
+        .onChange(of: destinationCoordinate.latitude) { _, _ in
+            Task { await loadRoutes() }
+        }
+        .onChange(of: destinationCoordinate.longitude) { _, _ in
+            Task { await loadRoutes() }
         }
     }
 
@@ -650,8 +951,8 @@ private struct RealMapBackground: View {
     }
 
     private func loadRoutes() async {
-        let source = MKMapItem(placemark: MKPlacemark(coordinate: Self.sfCaltrain))
-        let destination = MKMapItem(placemark: MKPlacemark(coordinate: Self.paloAltoCaltrain))
+        let source = MKMapItem(placemark: MKPlacemark(coordinate: sourceCoordinate))
+        let destination = MKMapItem(placemark: MKPlacemark(coordinate: destinationCoordinate))
 
         var overlays: [RouteOverlay] = []
 
@@ -684,7 +985,7 @@ private struct RealMapBackground: View {
             overlays = [
                 RouteOverlay(
                     id: "fallback",
-                    coordinates: [Self.sfCaltrain, Self.paloAltoCaltrain],
+                    coordinates: [sourceCoordinate, destinationCoordinate],
                     color: Color(red: 0.86, green: 0.22, blue: 0.18),
                     dashed: false,
                     lineWidth: 9
@@ -693,6 +994,25 @@ private struct RealMapBackground: View {
         }
 
         routeOverlays = overlays
+        mapPosition = .region(regionFitting(source: sourceCoordinate, destination: destinationCoordinate))
+    }
+
+    private func regionFitting(
+        source: CLLocationCoordinate2D,
+        destination: CLLocationCoordinate2D
+    ) -> MKCoordinateRegion {
+        let minLat = min(source.latitude, destination.latitude)
+        let maxLat = max(source.latitude, destination.latitude)
+        let minLon = min(source.longitude, destination.longitude)
+        let maxLon = max(source.longitude, destination.longitude)
+        let centerLat = (minLat + maxLat) / 2
+        let centerLon = (minLon + maxLon) / 2
+        let spanLat = max((maxLat - minLat) * 1.9, 0.06)
+        let spanLon = max((maxLon - minLon) * 1.9, 0.06)
+        return MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: centerLat, longitude: centerLon),
+            span: MKCoordinateSpan(latitudeDelta: spanLat, longitudeDelta: spanLon)
+        )
     }
 }
 

@@ -71,4 +71,27 @@ public final class DashboardViewModel {
             loadState = .failed("Failed to compute commute plan")
         }
     }
+
+    public func currentProfile() -> CommuteProfile? {
+        profile
+    }
+
+    public func updateAddresses(
+        homeAddress: String,
+        workAddress: String,
+        homeLatitude: Double?,
+        homeLongitude: Double?,
+        workLatitude: Double?,
+        workLongitude: Double?
+    ) async {
+        guard var profile else { return }
+        profile.homeAddress = homeAddress
+        profile.workAddress = workAddress
+        profile.homeLatitude = homeLatitude
+        profile.homeLongitude = homeLongitude
+        profile.workLatitude = workLatitude
+        profile.workLongitude = workLongitude
+        self.profile = profile
+        await profileStore.saveProfile(profile)
+    }
 }
