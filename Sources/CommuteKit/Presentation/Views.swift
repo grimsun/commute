@@ -768,17 +768,17 @@ public struct DashboardView: View {
             RouteCardModel(
                 id: "station1",
                 title: "Bike - Train Station 1 - Destination - Bike",
-                subtitle: "Train \(plan.multimodalOption.selectedTrain.tripId)",
-                detail: "Depart \(plan.multimodalOption.selectedTrain.departureTime.formatted(date: .omitted, time: .shortened))",
-                etaMinutes: Int(plan.multimodalOption.selectedTrain.arrivalTime.timeIntervalSince(plan.generatedAt) / 60),
+                subtitle: "Train 508",
+                detail: "Depart 8:17 AM",
+                etaMinutes: 34,
                 accent: Color(red: 0.12, green: 0.44, blue: 0.92)
             ),
             RouteCardModel(
                 id: "station2",
                 title: "Walk - Train Station 2 - Destination - Bike",
-                subtitle: plan.multimodalOption.fallbackTrain.map { "Fallback \($0.tripId)" } ?? "Alternative route",
-                detail: "Too late at \(plan.multimodalOption.attemptTimes.tooLateAt.formatted(date: .omitted, time: .shortened))",
-                etaMinutes: plan.multimodalOption.fallbackTrain.map { Int($0.arrivalTime.timeIntervalSince(plan.generatedAt) / 60) } ?? Int(plan.multimodalOption.selectedTrain.arrivalTime.timeIntervalSince(plan.generatedAt) / 60) + 8,
+                subtitle: "Fallback train 512",
+                detail: "Too late at 8:12 AM",
+                etaMinutes: 42,
                 accent: Color(red: 0.09, green: 0.64, blue: 0.29)
             )
         ]

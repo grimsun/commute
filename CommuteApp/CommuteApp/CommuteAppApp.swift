@@ -25,7 +25,7 @@ struct RootView: View {
         DashboardView(
             viewModel: DashboardViewModel(
                 planner: DefaultPlanner(
-                    trafficProvider: MockTrafficProvider(),
+                    trafficProvider: MapKitTrafficProvider(),
                     transitProvider: MockTransitProvider(),
                     bikeProvider: MockBikeETAProvider()
                 ),

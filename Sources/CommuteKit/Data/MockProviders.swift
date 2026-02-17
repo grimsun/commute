@@ -20,6 +20,7 @@ public actor MockTrafficProvider: TrafficProvider {
 
 public actor MockTransitProvider: TransitProvider {
     public var departures: [TrainDeparture]
+    private let usesRollingSchedule: Bool
 
     public init(referenceNow: Date = Date()) {
         departures = [
@@ -42,19 +43,43 @@ public actor MockTransitProvider: TransitProvider {
                 platform: "2"
             )
         ]
+        usesRollingSchedule = true
     }
 
     public init(departures: [TrainDeparture]) {
         self.departures = departures
+        usesRollingSchedule = false
     }
 
     public func nextTrains(station: String, line: String, after: Date, limit: Int) async throws -> [TrainDeparture] {
-        Array(
+        let filtered = Array(
             departures
                 .filter { $0.departureTime >= after }
                 .sorted { $0.departureTime < $1.departureTime }
                 .prefix(limit)
         )
+
+        if !filtered.isEmpty || !usesRollingSchedule {
+            return filtered
+        }
+
+        // Keep mock data usable over long app sessions by generating a rolling schedule.
+        var generated: [TrainDeparture] = []
+        for idx in 0..<max(limit, 1) {
+            let departure = after.addingTimeInterval(TimeInterval((idx + 1) * 15 * 60))
+            let arrival = departure.addingTimeInterval(24 * 60)
+            generated.append(
+                TrainDeparture(
+                    tripId: "T-\(String(format: "%03d", 100 + idx))",
+                    departureTime: departure,
+                    arrivalTime: arrival,
+                    platform: idx.isMultiple(of: 2) ? "1" : "2"
+                )
+            )
+        }
+
+        departures = generated
+        return generated
     }
 }
 
