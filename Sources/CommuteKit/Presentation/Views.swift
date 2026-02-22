@@ -57,8 +57,11 @@ public struct DashboardView: View {
     @State private var addressSaveError: String?
     @State private var mapSourceCoordinate = DashboardView.defaultHomeCoordinate
     @State private var mapDestinationCoordinate = DashboardView.defaultWorkCoordinate
+    @State private var liveTransitETAMinutes: Int?
+    @State private var liveTransitArrivalTime: Date?
     @State private var transitDebugLines: [String] = []
     @State private var transitDebugLoading = false
+    @State private var transitDebugSummary: String?
     @State private var transitDebugError: String?
 
     public init(viewModel: DashboardViewModel) {
@@ -237,7 +240,7 @@ public struct DashboardView: View {
                 await viewModel.bootstrap(defaultProfile: profile)
                 applyProfileCoordinatesIfAvailable()
                 loadAddressDraftsFromProfile()
-                await viewModel.refreshPlan()
+                await refreshMainScreenData()
             }
             .sheet(isPresented: $isSettingsPresented) {
                 settingsSheet
@@ -259,7 +262,7 @@ public struct DashboardView: View {
                     toggleDirection()
                 }
                 Task {
-                    await viewModel.refreshPlan()
+                    await refreshMainScreenData()
                 }
             } label: {
                 Image(systemName: "arrow.left.arrow.right")
@@ -367,14 +370,13 @@ public struct DashboardView: View {
                 VStack(spacing: 14) {
                     addressSettingsSection
                     settingsControls
-                    transitDebugSection
+                    etaDebugSection
                 }
                 .padding()
             }
             .navigationTitle("Settings")
             .task {
                 loadAddressDraftsFromProfile()
-                await loadTransitDebugResults()
             }
             .sheet(item: $activeAddressPicker) { target in
                 AddressTypeaheadSheet(
@@ -481,11 +483,44 @@ public struct DashboardView: View {
 
             Button("Recalculate") {
                 Task {
-                    await viewModel.refreshPlan()
+                    await refreshMainScreenData()
                 }
             }
             .buttonStyle(.borderedProminent)
         }
+        .padding(12)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var etaDebugSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("ETA Debug")
+                .font(.headline)
+
+            if case let .loaded(plan) = viewModel.loadState {
+                Text("Car: \(Int(plan.carOption.eta / 60))m (arrive \(Date().addingTimeInterval(plan.carOption.eta).formatted(date: .omitted, time: .shortened)))")
+                    .font(.footnote)
+                    .foregroundStyle(.primary)
+            } else {
+                Text("Car: unavailable")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let liveTransitETAMinutes {
+                let arrivalText = liveTransitArrivalTime?.formatted(date: .omitted, time: .shortened) ?? "?"
+                Text("Transit: \(liveTransitETAMinutes)m (arrive \(arrivalText))")
+                    .font(.footnote)
+                    .foregroundStyle(.primary)
+            } else {
+                Text("Transit: unavailable")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -510,9 +545,19 @@ public struct DashboardView: View {
                 .buttonStyle(.bordered)
             }
 
-            Text("Ferry Building SF → Stanford University")
+            Text("Transit probe matrix: ETA vs route, multiple times and endpoint variants")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+
+            if let transitDebugSummary {
+                Text(transitDebugSummary)
+                    .font(.footnote)
+                    .foregroundStyle(Color(red: 0.05, green: 0.38, blue: 0.19))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(Color.green.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
 
             if let transitDebugError {
                 Text(transitDebugError)
@@ -581,8 +626,34 @@ public struct DashboardView: View {
 
         await persistAddressChanges()
         addressSaveMessage = "\(target.title) updated."
-        await viewModel.refreshPlan()
+        await refreshMainScreenData()
         isSavingAddresses = false
+    }
+
+    private func refreshMainScreenData() async {
+        await viewModel.refreshPlan()
+        await refreshLiveTransitETA()
+    }
+
+    private func refreshLiveTransitETA() async {
+        let endpoints: (CLLocationCoordinate2D, CLLocationCoordinate2D) = viewModel.direction == .homeToWork
+            ? (mapSourceCoordinate, mapDestinationCoordinate)
+            : (mapDestinationCoordinate, mapSourceCoordinate)
+
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: endpoints.0))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: endpoints.1))
+        request.transportType = .transit
+        request.departureDate = Date()
+
+        do {
+            let response = try await MKDirections(request: request).calculateETA()
+            liveTransitETAMinutes = Int(response.expectedTravelTime / 60)
+            liveTransitArrivalTime = Date().addingTimeInterval(response.expectedTravelTime)
+        } catch {
+            liveTransitETAMinutes = nil
+            liveTransitArrivalTime = nil
+        }
     }
 
     private func persistAddressChanges() async {
@@ -604,44 +675,205 @@ public struct DashboardView: View {
         if transitDebugLoading { return }
         transitDebugLoading = true
         transitDebugError = nil
+        transitDebugSummary = nil
         transitDebugLines = []
 
-        do {
-            let sourceItem = try await resolveMapItem(
-                query: "Ferry Building, San Francisco",
-                regionCenter: CLLocationCoordinate2D(latitude: 37.7955, longitude: -122.3937)
-            )
-            let destinationItem = try await resolveMapItem(
-                query: "Stanford University",
-                regionCenter: CLLocationCoordinate2D(latitude: 37.4275, longitude: -122.1697)
-            )
-
-            let response = try await queryTransitRoutes(
-                source: sourceItem,
-                destination: destinationItem
-            )
-            let lines = response.routes.enumerated().map { idx, route in
-                let etaMin = Int(route.expectedTravelTime / 60)
-                let distanceKm = route.distance / 1000
-                let firstSteps = route.steps
-                    .prefix(3)
-                    .map { $0.instructions.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " | ")
-
-                return "\(idx + 1). ETA \(etaMin)m, \(String(format: "%.1f", distanceKm))km, \(route.name.isEmpty ? "Transit route" : route.name)\(firstSteps.isEmpty ? "" : " — \(firstSteps)")"
-            }
-
-            transitDebugLines = lines
-            if lines.isEmpty {
-                transitDebugError = "No transit itineraries were returned for this query."
-            }
-        } catch {
-            let nsError = error as NSError
-            transitDebugError = "Transit query failed (\(nsError.domain) \(nsError.code)): \(nsError.localizedDescription)"
+        let lines = await runTransitProbeMatrix()
+        transitDebugLines = lines
+        if lines.isEmpty {
+            transitDebugError = "No transit probe results were produced."
+        } else {
+            transitDebugSummary = makeTransitProbeSummary(from: lines)
         }
 
         transitDebugLoading = false
+    }
+
+    private func makeTransitProbeSummary(from lines: [String]) -> String? {
+        let etaSuccessCount = lines.filter { $0.hasPrefix("[ETA]") && $0.contains(" success ") }.count
+        let routeSuccessCount = lines.filter { $0.hasPrefix("[ROUTE]") && $0.contains(" success ") }.count
+        let routeMK5Count = lines.filter { $0.hasPrefix("[ROUTE]") && $0.contains("MKErrorDomain:5") }.count
+
+        if etaSuccessCount > 0 && routeSuccessCount == 0 && routeMK5Count > 0 {
+            return "Transit ETA is working in MapKit (\(etaSuccessCount) successful probes). Full transit route calculation is failing with MKErrorDomain:5 in this environment, so treat route failures below as diagnostics, not app failure."
+        }
+
+        if etaSuccessCount > 0 {
+            return "Transit ETA probes succeeded (\(etaSuccessCount)); use ETA as the supported signal. Route probe failures below are diagnostic details."
+        }
+
+        return nil
+    }
+
+    private func runTransitProbeMatrix() async -> [String] {
+        var lines: [String] = []
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Los_Angeles") ?? .current
+        let now = Date()
+        let nextWeekday8am = nextWeekdayMorning8am(from: now, calendar: calendar)
+        let nextWeekday530pm = calendar.date(
+            bySettingHour: 17,
+            minute: 30,
+            second: 0,
+            of: nextWeekday8am
+        ) ?? nextWeekday8am
+
+        let probes: [(label: String, date: Date)] = [
+            ("now", now),
+            ("wkday 8:00", nextWeekday8am),
+            ("wkday 17:30", nextWeekday530pm)
+        ]
+
+        let caseAResolved = await resolveEndpointsForProbe(
+            sourceQuery: "Ferry Building, San Francisco",
+            sourceCenter: CLLocationCoordinate2D(latitude: 37.7955, longitude: -122.3937),
+            destinationQuery: "Stanford University",
+            destinationCenter: CLLocationCoordinate2D(latitude: 37.4275, longitude: -122.1697)
+        )
+        let caseBResolved = await resolveEndpointsForProbe(
+            sourceQuery: "San Francisco Caltrain",
+            sourceCenter: CLLocationCoordinate2D(latitude: 37.7764, longitude: -122.3946),
+            destinationQuery: "Palo Alto Caltrain",
+            destinationCenter: CLLocationCoordinate2D(latitude: 37.4436, longitude: -122.1651)
+        )
+
+        let coordinateCases: [(String, MKMapItem, MKMapItem)] = [
+            (
+                "B-coords",
+                MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: 37.7764, longitude: -122.3946))),
+                MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: 37.4436, longitude: -122.1651)))
+            ),
+            (
+                "A-coords",
+                MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: 37.7955, longitude: -122.3937))),
+                MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: 37.4275, longitude: -122.1697)))
+            )
+        ]
+
+        if let caseAResolved {
+            lines.append("[SETUP][A-resolved] source=\(probeMapItemSummary(caseAResolved.source)) dest=\(probeMapItemSummary(caseAResolved.destination))")
+        } else {
+            lines.append("[SETUP][A-resolved] failed to resolve Ferry Building/Stanford")
+        }
+        if let caseBResolved {
+            lines.append("[SETUP][B-resolved] source=\(probeMapItemSummary(caseBResolved.source)) dest=\(probeMapItemSummary(caseBResolved.destination))")
+        } else {
+            lines.append("[SETUP][B-resolved] failed to resolve SF/Palo Alto Caltrain")
+        }
+
+        let resolvedCases: [(String, MKMapItem, MKMapItem)] = [
+            caseAResolved.map { ("A-resolved", $0.source, $0.destination) },
+            caseBResolved.map { ("B-resolved", $0.source, $0.destination) }
+        ].compactMap { $0 }
+
+        for (caseLabel, source, destination) in resolvedCases + coordinateCases {
+            for (timeLabel, departureDate) in probes {
+                lines.append(await probeTransitETA(caseLabel: caseLabel, timeLabel: timeLabel, source: source, destination: destination, departureDate: departureDate))
+                lines.append(await probeCarETA(caseLabel: caseLabel, timeLabel: timeLabel, source: source, destination: destination, departureDate: departureDate))
+                lines.append(await probeTransitRoute(caseLabel: caseLabel, timeLabel: timeLabel, source: source, destination: destination, departureDate: departureDate))
+            }
+        }
+
+        return lines
+    }
+
+    private func resolveEndpointsForProbe(
+        sourceQuery: String,
+        sourceCenter: CLLocationCoordinate2D,
+        destinationQuery: String,
+        destinationCenter: CLLocationCoordinate2D
+    ) async -> (source: MKMapItem, destination: MKMapItem)? {
+        do {
+            let source = try await resolveMapItem(query: sourceQuery, regionCenter: sourceCenter)
+            let destination = try await resolveMapItem(query: destinationQuery, regionCenter: destinationCenter)
+            return (source, destination)
+        } catch {
+            return nil
+        }
+    }
+
+    private func probeTransitETA(
+        caseLabel: String,
+        timeLabel: String,
+        source: MKMapItem,
+        destination: MKMapItem,
+        departureDate: Date
+    ) async -> String {
+        let request = MKDirections.Request()
+        request.source = source
+        request.destination = destination
+        request.transportType = .transit
+        request.requestsAlternateRoutes = false
+        request.departureDate = departureDate
+
+        do {
+            let response = try await MKDirections(request: request).calculateETA()
+            let minutes = Int(response.expectedTravelTime / 60)
+            let arrival = departureDate.addingTimeInterval(response.expectedTravelTime)
+            return "[ETA][\(caseLabel)][\(timeLabel)] success \(minutes)m arrive \(arrival.formatted(date: .omitted, time: .shortened))"
+        } catch {
+            return "[ETA][\(caseLabel)][\(timeLabel)] fail \(debugNSErrorLine(error))"
+        }
+    }
+
+    private func probeTransitRoute(
+        caseLabel: String,
+        timeLabel: String,
+        source: MKMapItem,
+        destination: MKMapItem,
+        departureDate: Date
+    ) async -> String {
+        let request = MKDirections.Request()
+        request.source = source
+        request.destination = destination
+        request.transportType = .transit
+        request.requestsAlternateRoutes = false
+        request.departureDate = departureDate
+
+        do {
+            let response = try await MKDirections(request: request).calculate()
+            if let first = response.routes.first {
+                return "[ROUTE][\(caseLabel)][\(timeLabel)] success routes=\(response.routes.count) eta=\(Int(first.expectedTravelTime / 60))m"
+            }
+            return "[ROUTE][\(caseLabel)][\(timeLabel)] empty routes=0"
+        } catch {
+            return "[ROUTE][\(caseLabel)][\(timeLabel)] fail \(debugNSErrorLine(error))"
+        }
+    }
+
+    private func probeCarETA(
+        caseLabel: String,
+        timeLabel: String,
+        source: MKMapItem,
+        destination: MKMapItem,
+        departureDate: Date
+    ) async -> String {
+        let request = MKDirections.Request()
+        request.source = source
+        request.destination = destination
+        request.transportType = .automobile
+        request.departureDate = departureDate
+
+        do {
+            let response = try await MKDirections(request: request).calculateETA()
+            let minutes = Int(response.expectedTravelTime / 60)
+            let arrival = departureDate.addingTimeInterval(response.expectedTravelTime)
+            return "[CAR][\(caseLabel)][\(timeLabel)] success \(minutes)m arrive \(arrival.formatted(date: .omitted, time: .shortened))"
+        } catch {
+            return "[CAR][\(caseLabel)][\(timeLabel)] fail \(debugNSErrorLine(error))"
+        }
+    }
+
+    private func debugNSErrorLine(_ error: Error) -> String {
+        let nsError = error as NSError
+        return "\(nsError.domain):\(nsError.code) \(nsError.localizedDescription)"
+    }
+
+    private func probeMapItemSummary(_ item: MKMapItem) -> String {
+        let c = item.placemark.coordinate
+        let name = item.name ?? "?"
+        return "\(name)@\(String(format: "%.4f", c.latitude)),\(String(format: "%.4f", c.longitude))"
     }
 
     private func queryTransitRoutes(
@@ -653,6 +885,7 @@ public struct DashboardView: View {
         let now = Date()
         let nextWeekday8am = nextWeekdayMorning8am(from: now, calendar: calendar)
         let departureCandidates = [nextWeekday8am, now]
+        var lastError: Error?
 
         for departureDate in departureCandidates {
             // First attempt with alternates, then retry simple transit request.
@@ -670,11 +903,16 @@ public struct DashboardView: View {
                         return response
                     }
                 } catch {
+                    lastError = error
                     if wantsAlternates {
                         continue
                     }
                 }
             }
+        }
+
+        if let lastError {
+            throw lastError
         }
 
         throw NSError(
@@ -768,9 +1006,9 @@ public struct DashboardView: View {
             RouteCardModel(
                 id: "station1",
                 title: "Bike - Train Station 1 - Destination - Bike",
-                subtitle: "Train 508",
-                detail: "Depart 8:17 AM",
-                etaMinutes: 34,
+                subtitle: liveTransitETAMinutes == nil ? "Transit ETA unavailable" : "Transit ETA from MapKit",
+                detail: liveTransitArrivalTime.map { "Arrive \($0.formatted(date: .omitted, time: .shortened))" } ?? "Route details unavailable in current environment",
+                etaMinutes: liveTransitETAMinutes ?? 34,
                 accent: Color(red: 0.12, green: 0.44, blue: 0.92)
             ),
             RouteCardModel(
