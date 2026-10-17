@@ -39,11 +39,6 @@ public enum Direction: String, Codable, CaseIterable, Sendable {
     public var reversed: Direction {
         self == .homeToWork ? .workToHome : .homeToWork
     }
-
-    /// Morning commutes go to work, afternoon commutes go home.
-    public static func suggested(at date: Date, calendar: Calendar = .caltrain) -> Direction {
-        calendar.component(.hour, from: date) < 12 ? .homeToWork : .workToHome
-    }
 }
 
 /// How the rider gets between a place and its station.

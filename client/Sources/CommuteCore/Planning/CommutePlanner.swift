@@ -1,7 +1,8 @@
 import Foundation
 
 public protocol CommutePlanning: Sendable {
-    func plan(profile: CommuteProfile, direction: Direction, now: Date) async throws -> CommutePlan
+    /// `pickedTripID` is a train the rider chose; it is followed while it can still be caught.
+    func plan(profile: CommuteProfile, direction: Direction, now: Date, pickedTripID: String?) async throws -> CommutePlan
 }
 
 public enum PlannerError: Error, Equatable {
@@ -13,8 +14,14 @@ public enum PlannerError: Error, Equatable {
 ///
 /// The target train is the first preferred train the rider catches, with the safety buffer,
 /// when leaving at the target time. While it is still catchable the plan follows it through
-/// get ready → leave now. Once it is not, the plan rolls to the next catchable train.
+/// get ready → leave now. Once it is not, the plan rolls to the next catchable preferred train,
+/// for up to `CommuteWindow.rolloverInterval` after the target; then the target moves to tomorrow.
+/// A train the rider picked overrides all of this while it can still be caught.
 public struct DefaultPlanner: CommutePlanning {
+    /// How many already-departed trains lead the list, for context.
+    static let departedShown = 2
+    static let departedLookback: TimeInterval = 90 * 60
+
     private let transit: TransitProvider
     private let traffic: TrafficProvider?
     private let calendar: Calendar
@@ -25,7 +32,7 @@ public struct DefaultPlanner: CommutePlanning {
         self.calendar = calendar
     }
 
-    public func plan(profile: CommuteProfile, direction: Direction, now: Date) async throws -> CommutePlan {
+    public func plan(profile: CommuteProfile, direction: Direction, now: Date, pickedTripID: String? = nil) async throws -> CommutePlan {
         let originID = profile.originStationID(for: direction)
         let destinationID = profile.destinationStationID(for: direction)
         guard let originStation = StationCatalog.station(id: originID) else {
@@ -38,7 +45,7 @@ public struct DefaultPlanner: CommutePlanning {
             throw PlannerError.sameStation
         }
 
-        let targetLeave = profile.targetLeave(for: direction).date(on: now, calendar: calendar)
+        let targetLeave = CommuteWindow.targetLeave(for: direction, profile: profile, now: now, calendar: calendar)
 
         async let car = carOption(
             from: profile.origin(for: direction).coordinate,
@@ -46,11 +53,12 @@ public struct DefaultPlanner: CommutePlanning {
             now: now,
             profile: profile
         )
+        // Start a little earlier so the list can show the last trains that already left.
         let snapshot = try await transit.departures(
             fromStation: originID,
             toStation: destinationID,
-            after: min(now, targetLeave),
-            limit: 24
+            after: min(now, targetLeave).addingTimeInterval(-Self.departedLookback),
+            limit: 30
         )
 
         let accessTime = TimeInterval(profile.accessMinutes(for: direction) * 60)
@@ -60,19 +68,38 @@ public struct DefaultPlanner: CommutePlanning {
             AttemptRules.attempts(for: $0, accessTime: accessTime, safetyBuffer: safetyBuffer, prepLeadTime: prepLeadTime)
         }
 
-        let preferred = snapshot.departures
-            .filter { profile.preferredServices.contains($0.service) }
-            .sorted { $0.departureTime < $1.departureTime }
-        let candidates = preferred.filter { !$0.isCancelled }
+        var departures = snapshot.departures
+        // A morning schedule page may end before the evening (or tomorrow's) target.
+        // Fetch that part of the timetable explicitly instead of choosing an earlier train.
+        if !departures.contains(where: {
+            profile.preferredServices.contains($0.service) && !$0.isCancelled && attempts($0).leaveAt >= targetLeave
+        }), targetLeave > now {
+            let targetSnapshot = try await transit.departures(
+                fromStation: originID,
+                toStation: destinationID,
+                after: targetLeave.addingTimeInterval(accessTime + safetyBuffer),
+                limit: 30
+            )
+            let known = Set(departures.map(\.id))
+            departures += targetSnapshot.departures.filter { !known.contains($0.id) }
+        }
+        let all = departures.sorted { $0.departureTime < $1.departureTime }
+        let candidates = all.filter { profile.preferredServices.contains($0.service) && !$0.isCancelled }
 
+        let picked = pickedTripID.flatMap { id in
+            all.first { $0.tripID == id && !$0.isCancelled && now <= attempts($0).tooLateAt }
+        }
         let target = candidates.first { attempts($0).leaveAt >= targetLeave }
         let selected: TrainDeparture?
         let state: CommuteState
-        if let target, now <= attempts(target).tooLateAt {
+        if let picked {
+            selected = picked
+            state = AttemptRules.state(now: now, attempts: attempts(picked))
+        } else if let target, now <= attempts(target).tooLateAt {
             selected = target
             state = AttemptRules.state(now: now, attempts: attempts(target))
         } else {
-            selected = candidates.first { now <= attempts($0).tooLateAt }
+            selected = candidates.first { attempts($0).leaveAt >= targetLeave && now <= attempts($0).tooLateAt }
             state = .rolledToNextTrain
         }
 
@@ -81,15 +108,13 @@ public struct DefaultPlanner: CommutePlanning {
                 train: train,
                 attempts: attempts(train),
                 state: state,
-                fallback: candidates.first { $0.departureTime > train.departureTime }
+                fallback: candidates.first { $0.departureTime > train.departureTime },
+                isManual: train.tripID == picked?.tripID
             )
         }
 
-        let visibleFrom = now.addingTimeInterval(-60)
-        let upcoming = preferred.filter { $0.departureTime >= visibleFrom }
-        let hidden = snapshot.departures.filter {
-            !profile.preferredServices.contains($0.service) && $0.departureTime >= visibleFrom
-        }
+        let departed = all.filter { $0.departureTime < now }.suffix(Self.departedShown)
+        let upcoming = Array(departed) + all.filter { $0.departureTime >= now }
 
         return CommutePlan(
             generatedAt: now,
@@ -103,7 +128,6 @@ public struct DefaultPlanner: CommutePlanning {
             prepLeadTime: prepLeadTime,
             train: trainOption,
             upcoming: upcoming,
-            hiddenTrainCount: hidden.count,
             transitSource: snapshot.source,
             transitFetchedAt: snapshot.fetchedAt,
             transitNotice: snapshot.notice,

@@ -274,7 +274,7 @@ struct SettingsView: View {
             Text("Notifications")
         } footer: {
             if draft.dataSource.mode == .standalone {
-                Text("Scheduled a week ahead from the timetable, so they arrive even if the app stays closed. They can’t follow delays. Tap “I’m on my way” to silence the rest of a trip.")
+                Text("Scheduled a week ahead from the timetable, so they arrive even if the app stays closed. They can’t follow delays. With location access, a trip’s remaining alerts stop once you’ve left.")
             }
         }
     }

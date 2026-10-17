@@ -55,7 +55,8 @@ public struct LeaveAlertPlanner: Sendable {
         self.calendar = calendar
     }
 
-    public func alerts(profile: CommuteProfile, now: Date, days: Int = 7, skipping departed: Set<CommuteKey> = []) async -> [LeaveAlert] {
+    /// `picks` are trains the rider chose for specific commutes; their alerts follow those trains.
+    public func alerts(profile: CommuteProfile, now: Date, days: Int = 7, skipping departed: Set<CommuteKey> = [], picks: [CommuteKey: String] = [:]) async -> [LeaveAlert] {
         var alerts: [LeaveAlert] = []
         let today = calendar.startOfDay(for: now)
 
@@ -69,7 +70,7 @@ public struct LeaveAlertPlanner: Sendable {
                 let target = profile.targetLeave(for: direction).date(on: day, calendar: calendar)
                 // Plan from well before the target so the target train is chosen, or from now if later.
                 let planningTime = max(now, target.addingTimeInterval(-3 * 3600))
-                guard let plan = try? await planner.plan(profile: profile, direction: direction, now: planningTime),
+                guard let plan = try? await planner.plan(profile: profile, direction: direction, now: planningTime, pickedTripID: picks[key]),
                       let option = plan.train,
                       calendar.isDate(option.train.departureTime, inSameDayAs: day) else { continue }
 

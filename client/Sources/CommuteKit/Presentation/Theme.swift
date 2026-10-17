@@ -70,29 +70,87 @@ enum Format {
         date.formatted(Date.FormatStyle(date: .omitted, time: .shortened, timeZone: Calendar.caltrain.timeZone))
     }
 
+    static func day(_ date: Date, relativeTo now: Date) -> String {
+        let calendar = Calendar.caltrain
+        let offset = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: date)).day
+        switch offset {
+        case 0: return "Today"
+        case 1: return "Tomorrow"
+        case -1: return "Yesterday"
+        default: return date.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted, timeZone: calendar.timeZone))
+        }
+    }
+
+    /// "8 min", "1h 52 min", "2h".
     static func minutes(_ interval: TimeInterval) -> String {
         let minutes = max(0, Int((interval / 60).rounded()))
         if minutes < 60 {
             return "\(minutes) min"
         }
-        return minutes % 60 == 0 ? "\(minutes / 60) h" : "\(minutes / 60) h \(minutes % 60) min"
+        return minutes % 60 == 0 ? "\(minutes / 60)h" : "\(minutes / 60)h \(minutes % 60) min"
     }
 
-    /// "in 12 min", "now", "3 min ago". Rounds up so a countdown never shows 0 too early.
+    /// Time left until `date`, rounded up so a countdown never reaches 0 early: "22 min", "1h 52 min", "<1 min".
+    static func countdown(to date: Date, from now: Date) -> String {
+        let seconds = date.timeIntervalSince(now)
+        if seconds < 60 {
+            return "<1 min"
+        }
+        return minutes(ceil(seconds / 60) * 60)
+    }
+
+    /// "in 12 min", "now", "3 min ago".
     static func relative(_ date: Date, from now: Date) -> String {
         let seconds = date.timeIntervalSince(now)
         if abs(seconds) < 60 {
             return "now"
         }
         if seconds > 0 {
-            return "in \(minutes(ceil(seconds / 60) * 60))"
+            return "in \(countdown(to: date, from: now))"
         }
         return "\(minutes(-seconds)) ago"
     }
 }
 
+/// How pressing the leave time is: drives the green → yellow → red of the card and list.
+enum Urgency: Hashable {
+    /// Before get-ready time.
+    case relaxed
+    /// Getting ready.
+    case soon
+    /// The last few minutes before leaving, and leave-now itself.
+    case urgent
+    /// Past too-late; a new plan is on its way.
+    case missed
+
+    /// Minutes before the leave time when the countdown turns red.
+    static let urgentLead: TimeInterval = 3 * 60
+
+    init(attempts: AttemptTimes, now: Date) {
+        if now > attempts.tooLateAt {
+            self = .missed
+        } else if now >= attempts.leaveAt.addingTimeInterval(-Self.urgentLead) {
+            self = .urgent
+        } else if now >= attempts.getReadyAt {
+            self = .soon
+        } else {
+            self = .relaxed
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .relaxed: .green
+        // A deep amber reads as yellow but stays legible on white.
+        case .soon: Color(red: 0.85, green: 0.62, blue: 0.0)
+        case .urgent, .missed: .red
+        }
+    }
+}
+
 struct ServiceBadge: View {
     let service: TrainService
+    var tint: Color? = nil
 
     var body: some View {
         Text(service.shortName)
@@ -101,7 +159,7 @@ struct ServiceBadge: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(service.color, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .background(tint ?? service.color, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
             .fixedSize()
     }
 }

@@ -1,71 +1,145 @@
 import SwiftUI
 
-/// Full-screen map with the plan in a persistent bottom sheet.
+/// Full-screen map with the plan in a two-position bottom sheet: collapsed to the next train,
+/// or expanded to full height.
 public struct DashboardView: View {
     public enum PanelSize: String, Sendable {
-        case peek, medium, large
+        case collapsed, expanded
     }
 
     @State private var viewModel: CommuteViewModel
     @Environment(\.scenePhase) private var scenePhase
     @State private var isSettingsPresented = false
+    @State private var isExpanded = false
+    /// Applied once loaded: the sheet settles at its first detent while it is being presented.
+    private let startsExpanded: Bool
+    /// Fits the header and next-train card; updated as their content changes.
+    @State private var collapsedHeight: CGFloat = 380
+    @State private var hasMeasuredCollapsedHeight = false
     private let showsSettingsOnLaunch: Bool
-    @State private var detent: PresentationDetent
 
-    private static let peekDetent = PresentationDetent.height(220)
-
-    public init(viewModel: CommuteViewModel, panelSize: PanelSize = .medium, showsSettings: Bool = false) {
+    public init(viewModel: CommuteViewModel, panelSize: PanelSize = .collapsed, showsSettings: Bool = false) {
         _viewModel = State(initialValue: viewModel)
+        startsExpanded = panelSize == .expanded
         showsSettingsOnLaunch = showsSettings
-        let detent: PresentationDetent = switch panelSize {
-        case .peek: Self.peekDetent
-        case .medium: .medium
-        case .large: .large
+    }
+
+    private var collapsedDetent: PresentationDetent {
+        .height(collapsedHeight)
+    }
+
+    /// Maps the two positions onto detents; the collapsed height can change without losing the position.
+    private var detentSelection: Binding<PresentationDetent> {
+        Binding {
+            isExpanded ? .large : collapsedDetent
+        } set: { detent in
+            isExpanded = detent == .large
         }
-        _detent = State(initialValue: detent)
     }
 
     public var body: some View {
-        GeometryReader { proxy in
-            CommuteMapView(
-                profile: viewModel.profile,
-                direction: viewModel.direction,
-                bottomInset: mapInset(screenHeight: proxy.size.height)
-            )
-            .ignoresSafeArea()
+        CommuteMapView(
+            profile: viewModel.routeProfile,
+            direction: viewModel.direction,
+            isTemporaryRoute: viewModel.temporaryRoute != nil,
+            bottomInset: collapsedHeight
+        )
+        .ignoresSafeArea()
+        .overlay(alignment: .top) {
+            HStack {
+                settingsButton
+                Spacer()
+                refreshButton
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
         }
         .sheet(isPresented: .constant(true)) {
-            PlanPanel(viewModel: viewModel, isSettingsPresented: $isSettingsPresented)
-                .presentationDetents([Self.peekDetent, .medium, .large], selection: $detent)
-                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-                .presentationDragIndicator(.visible)
-                .presentationBackground(Palette.panel)
-                .interactiveDismissDisabled()
-                .sheet(isPresented: $isSettingsPresented) {
-                    SettingsView(viewModel: viewModel)
+            PlanPanel(viewModel: viewModel, isExpanded: isExpanded, onCollapsedHeightChange: { contentHeight in
+                // Expanded-only header text must not increase the collapsed detent.
+                guard !isExpanded else { return }
+                // Content plus the sheet's top grabber area and a little breathing room.
+                // The first measurement (the full-size loading card) sets the height; after that it
+                // only grows, so the collapsed sheet keeps one size across states and directions.
+                let fitted = min(max((contentHeight + 28).rounded(), 200), 620)
+                if !hasMeasuredCollapsedHeight {
+                    hasMeasuredCollapsedHeight = true
+                    collapsedHeight = fitted
+                } else if fitted > collapsedHeight + 1 {
+                    withAnimation(.snappy(duration: 0.25)) {
+                        collapsedHeight = fitted
+                    }
                 }
+            }, onPickTrain: {
+                // Show the picked train in the next-train card.
+                isExpanded = false
+            })
+            .presentationDetents([collapsedDetent, .large], selection: detentSelection)
+            .presentationContentInteraction(.resizes)
+            .presentationBackgroundInteraction(.enabled(upThrough: collapsedDetent))
+            .presentationDragIndicator(.visible)
+            .presentationBackground(Palette.panel)
+            .interactiveDismissDisabled()
+            .sheet(isPresented: $isSettingsPresented) {
+                SettingsView(viewModel: viewModel)
+            }
         }
         .task {
             await viewModel.run()
         }
         .onChange(of: viewModel.isLoaded) { _, loaded in
-            if loaded, showsSettingsOnLaunch {
+            guard loaded else { return }
+            if startsExpanded {
+                // Wait for the sheet's presentation to settle, or it resets to the first detent.
+                Task {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    isExpanded = true
+                }
+            }
+            if showsSettingsOnLaunch {
                 isSettingsPresented = true
             }
         }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase) { previous, phase in
             if phase == .active {
+                // Reopening the app starts from the next-train view, like a fresh launch.
+                if previous == .background {
+                    isExpanded = false
+                }
                 Task { await viewModel.becameActive() }
             }
         }
     }
 
-    private func mapInset(screenHeight: CGFloat) -> CGFloat {
-        switch detent {
-        case Self.peekDetent: 250
-        case .large: screenHeight * 0.9
-        default: screenHeight * 0.56
+    private var settingsButton: some View {
+        Button {
+            isSettingsPresented = true
+        } label: {
+            mapButtonLabel(Image(systemName: "gearshape.fill"))
         }
+        .buttonStyle(.plain)
+        .disabled(!viewModel.isLoaded)
+        .accessibilityLabel("Settings")
+    }
+
+    private var refreshButton: some View {
+        Button {
+            Task { await viewModel.refresh() }
+        } label: {
+            mapButtonLabel(viewModel.isRefreshing ? AnyView(ProgressView()) : AnyView(Image(systemName: "arrow.clockwise")))
+        }
+        .buttonStyle(.plain)
+        .disabled(!viewModel.isLoaded || viewModel.isRefreshing)
+        .accessibilityLabel("Refresh")
+    }
+
+    private func mapButtonLabel(_ content: some View) -> some View {
+        content
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(.primary)
+            .frame(width: 44, height: 44)
+            .background(.regularMaterial, in: Circle())
+            .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
     }
 }
 

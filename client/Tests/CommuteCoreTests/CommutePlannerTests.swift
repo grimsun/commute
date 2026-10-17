@@ -95,6 +95,15 @@ final class CommutePlannerTests: XCTestCase {
         XCTAssertEqual(option.state(at: at(8, 11)), .rolledToNextTrain)
     }
 
+    func testReplacementTrainAdvancesToLeaveNow() async throws {
+        let plan = try await planner([train("103", departs: at(8, 20)), train("105", departs: at(9, 0))])
+            .plan(profile: profile(), direction: .homeToWork, now: at(8, 11))
+        let option = try XCTUnwrap(plan.train)
+        XCTAssertEqual(option.state(at: at(8, 11)), .rolledToNextTrain)
+        XCTAssertEqual(option.state(at: at(8, 30)), .getReady)
+        XCTAssertEqual(option.state(at: at(8, 48)), .leaveNow)
+    }
+
     func testDelayMovesLeaveTimeLater() async throws {
         let delayed = train("103", departs: at(8, 20), delayMinutes: 6)
         let plan = try await planner([delayed]).plan(profile: profile(), direction: .homeToWork, now: at(7, 0))
@@ -120,15 +129,74 @@ final class CommutePlannerTests: XCTestCase {
         let plan = try await planner(trains).plan(profile: profile(services: [.express, .local]), direction: .homeToWork, now: at(7, 0))
 
         XCTAssertEqual(plan.train?.train.trainNumber, "503")
-        XCTAssertEqual(plan.upcoming.map(\.trainNumber), ["503", "105"])
-        XCTAssertEqual(plan.hiddenTrainCount, 1)
+        XCTAssertEqual(plan.upcoming.map(\.trainNumber), ["403", "503", "105"], "the list shows every service")
+    }
+
+    func testListLeadsWithTwoDepartedTrains() async throws {
+        let trains = (0..<5).map { train("10\($0)", departs: at(7, 0).addingTimeInterval(Double($0) * 15 * 60)) }
+        let plan = try await planner(trains).plan(profile: profile(), direction: .homeToWork, now: at(7, 40))
+
+        // 7:00, 7:15, 7:30 left; 7:45 and 8:00 are ahead.
+        XCTAssertEqual(plan.upcoming.map(\.trainNumber), ["101", "102", "103", "104"])
+    }
+
+    func testPickedTrainOverridesTargetWhileCatchable() async throws {
+        let trains = [
+            train("103", departs: at(8, 20)),
+            train("403", departs: at(8, 30), service: .limited),
+            train("105", departs: at(8, 40))
+        ]
+        let planner = planner(trains)
+        let localsOnly = profile(services: [.local])
+
+        let picked = try await planner.plan(profile: localsOnly, direction: .homeToWork, now: at(7, 0), pickedTripID: "403")
+        XCTAssertEqual(picked.train?.train.trainNumber, "403", "a pick may be any service")
+        XCTAssertEqual(picked.train?.isManual, true)
+        XCTAssertEqual(picked.train?.fallback?.trainNumber, "105", "fallback stays within preferred services")
+
+        let expired = try await planner.plan(profile: localsOnly, direction: .homeToWork, now: at(8, 21), pickedTripID: "403")
+        XCTAssertEqual(expired.train?.train.trainNumber, "105")
+        XCTAssertEqual(expired.train?.isManual, false)
+    }
+
+    func testRollsForFourHoursThenMovesToTomorrow() async throws {
+        let trains = [
+            train("103", departs: at(8, 20)), // today's target, missed
+            train("117", departs: at(11, 50)),
+            train("199", departs: at(12, 20)),
+            train("203", departs: at(8, 20, day: 20)) // tomorrow's target
+        ]
+        let planner = planner(trains)
+
+        let within = try await planner.plan(profile: profile(), direction: .homeToWork, now: at(11, 30))
+        XCTAssertEqual(within.train?.train.trainNumber, "117")
+        XCTAssertEqual(within.train?.state, .rolledToNextTrain)
+
+        let after = try await planner.plan(profile: profile(), direction: .homeToWork, now: at(12, 5))
+        XCTAssertEqual(after.targetLeave, at(8, 0, day: 20))
+        XCTAssertEqual(after.train?.train.trainNumber, "203")
+        XCTAssertEqual(after.train?.state, .onTrack)
+    }
+
+    func testFutureTargetBeyondFirstSchedulePage() async throws {
+        let early = (0..<35).map { train("early-\($0)", departs: at(6, 0).addingTimeInterval(Double($0) * 10 * 60)) }
+        let target = train("evening", departs: at(17, 50))
+        let plan = try await planner(early + [target]).plan(profile: profile(), direction: .workToHome, now: at(6, 0))
+        XCTAssertEqual(plan.train?.train.tripID, "evening")
+    }
+
+    func testNoFutureTargetDoesNotSelectTrainBeforeTargetTime() async throws {
+        let plan = try await planner([train("early", departs: at(7, 30))])
+            .plan(profile: profile(), direction: .homeToWork, now: at(7, 0))
+        XCTAssertNil(plan.train)
+        XCTAssertEqual(plan.upcoming.count, 1, "earlier trains remain available for manual selection")
     }
 
     func testNoTrainLeftProducesPlanWithoutTrain() async throws {
         let plan = try await planner([train("199", departs: at(8, 20))]).plan(profile: profile(), direction: .homeToWork, now: at(9, 0))
 
         XCTAssertNil(plan.train)
-        XCTAssertTrue(plan.upcoming.isEmpty)
+        XCTAssertEqual(plan.upcoming.map(\.trainNumber), ["199"], "only the departed train, for context")
     }
 
     func testEveningUsesWorkStationAndEveningTarget() async throws {

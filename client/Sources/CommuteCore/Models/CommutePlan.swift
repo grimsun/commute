@@ -33,21 +33,26 @@ public struct TrainOption: Equatable, Sendable {
     public var state: CommuteState
     /// The train after this one, in case this one is missed.
     public var fallback: TrainDeparture?
+    /// Picked by the rider rather than chosen from the target time.
+    public var isManual: Bool
 
-    public init(train: TrainDeparture, attempts: AttemptTimes, state: CommuteState, fallback: TrainDeparture?) {
+    public init(train: TrainDeparture, attempts: AttemptTimes, state: CommuteState, fallback: TrainDeparture?, isManual: Bool = false) {
         self.train = train
         self.attempts = attempts
         self.state = state
         self.fallback = fallback
+        self.isManual = isManual
     }
 
     /// The state as time passes after planning. A train that became too late reads as
     /// rolled over until the next plan picks the following one.
     public func state(at now: Date) -> CommuteState {
-        if state == .rolledToNextTrain || now > attempts.tooLateAt {
+        if now > attempts.tooLateAt {
             return .rolledToNextTrain
         }
-        return AttemptRules.state(now: now, attempts: attempts)
+        let current = AttemptRules.state(now: now, attempts: attempts)
+        // A replacement train still progresses to get ready and leave now.
+        return state == .rolledToNextTrain && current == .onTrack ? .rolledToNextTrain : current
     }
 }
 
@@ -79,10 +84,9 @@ public struct CommutePlan: Equatable, Sendable {
     public var prepLeadTime: TimeInterval
     /// `nil` when no preferred train is left today.
     public var train: TrainOption?
-    /// Upcoming trains of the preferred services, including cancelled ones.
+    /// The last couple of departed trains, then every upcoming train of all services,
+    /// including cancelled ones.
     public var upcoming: [TrainDeparture]
-    /// Upcoming trains hidden because their service is not preferred.
-    public var hiddenTrainCount: Int
     public var transitSource: TransitDataSource
     public var transitFetchedAt: Date
     public var transitNotice: String?
@@ -101,7 +105,6 @@ public struct CommutePlan: Equatable, Sendable {
         prepLeadTime: TimeInterval,
         train: TrainOption?,
         upcoming: [TrainDeparture],
-        hiddenTrainCount: Int,
         transitSource: TransitDataSource,
         transitFetchedAt: Date,
         transitNotice: String? = nil,
@@ -118,7 +121,6 @@ public struct CommutePlan: Equatable, Sendable {
         self.prepLeadTime = prepLeadTime
         self.train = train
         self.upcoming = upcoming
-        self.hiddenTrainCount = hiddenTrainCount
         self.transitSource = transitSource
         self.transitFetchedAt = transitFetchedAt
         self.transitNotice = transitNotice

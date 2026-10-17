@@ -43,13 +43,33 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(calendar.dateComponents([.hour, .minute, .day], from: date), DateComponents(day: 19, hour: 8, minute: 15))
     }
 
-    func testSuggestedDirection() {
+    func testCommuteWindowRollsOverFourHoursAfterTarget() {
         let calendar = Calendar.caltrain
-        let morning = calendar.date(from: DateComponents(year: 2026, month: 10, day: 19, hour: 9))!
-        let evening = calendar.date(from: DateComponents(year: 2026, month: 10, day: 19, hour: 15))!
+        func at(_ day: Int, _ hour: Int, _ minute: Int = 0) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: hour, minute: minute))!
+        }
+        let profile = CommuteProfile.default // 8:00 and 17:30 targets
 
-        XCTAssertEqual(Direction.suggested(at: morning, calendar: calendar), .homeToWork)
-        XCTAssertEqual(Direction.suggested(at: evening, calendar: calendar), .workToHome)
+        XCTAssertEqual(CommuteWindow.activeDirection(profile: profile, now: at(19, 6), calendar: calendar), .homeToWork)
+        XCTAssertEqual(CommuteWindow.activeDirection(profile: profile, now: at(19, 11, 59), calendar: calendar), .homeToWork, "within 4 h of 8:00")
+        XCTAssertEqual(CommuteWindow.activeDirection(profile: profile, now: at(19, 12, 1), calendar: calendar), .workToHome)
+        XCTAssertEqual(CommuteWindow.activeDirection(profile: profile, now: at(19, 21, 29), calendar: calendar), .workToHome, "within 4 h of 17:30")
+        XCTAssertEqual(CommuteWindow.activeDirection(profile: profile, now: at(19, 21, 31), calendar: calendar), .homeToWork, "tomorrow morning")
+
+        XCTAssertEqual(CommuteWindow.targetLeave(for: .homeToWork, profile: profile, now: at(19, 11), calendar: calendar), at(19, 8))
+        XCTAssertEqual(CommuteWindow.targetLeave(for: .homeToWork, profile: profile, now: at(19, 13), calendar: calendar), at(20, 8))
+    }
+
+    func testLateEveningWindowContinuesAcrossMidnight() {
+        let calendar = Calendar.caltrain
+        func at(_ day: Int, _ hour: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: hour))!
+        }
+        var profile = CommuteProfile.default
+        profile.eveningTargetLeave = TimeOfDay(hour: 23, minute: 0)
+        XCTAssertEqual(CommuteWindow.activeDirection(profile: profile, now: at(20, 1)), .workToHome)
+        XCTAssertEqual(CommuteWindow.targetLeave(for: .workToHome, profile: profile, now: at(20, 1)), at(19, 23))
+        XCTAssertEqual(CommuteWindow.activeDirection(profile: profile, now: at(20, 3)), .homeToWork)
     }
 
     func testGTFSRouteNamesMapToServices() {
@@ -131,5 +151,38 @@ final class SampleTransitProviderTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? SampleTransitError, .unknownStation("nowhere"))
         }
+    }
+}
+
+final class DepartureDetectionTests: XCTestCase {
+    private let home = Coordinate(latitude: 37.7764, longitude: -122.3946)
+    private let target = Date(timeIntervalSince1970: 2_000_000_000)
+
+    private func fix(metersNorth: Double, accuracy: Double = 20) -> LocationFix {
+        LocationFix(coordinate: Coordinate(latitude: home.latitude + metersNorth / 111_000, longitude: home.longitude), accuracy: accuracy)
+    }
+
+    func testLeftOnceBeyondRadius() {
+        let train = target.addingTimeInterval(1200)
+        XCTAssertFalse(DepartureDetection.hasLeft(origin: home, fix: fix(metersNorth: 100), targetLeave: target, trainDeparture: train, now: target))
+        XCTAssertTrue(DepartureDetection.hasLeft(origin: home, fix: fix(metersNorth: 600), targetLeave: target, trainDeparture: train, now: target))
+    }
+
+    func testInaccurateFixNeedsMoreDistance() {
+        let train = target.addingTimeInterval(1200)
+        XCTAssertFalse(DepartureDetection.hasLeft(origin: home, fix: fix(metersNorth: 400, accuracy: 300), targetLeave: target, trainDeparture: train, now: target))
+    }
+
+    func testBeyondStationMeansOnATrain() {
+        let station = Coordinate(latitude: home.latitude + 1000 / 111_000, longitude: home.longitude) // 1 km away
+        XCTAssertFalse(DepartureDetection.isBeyondStation(origin: home, station: station, fix: fix(metersNorth: 1200)), "on the way to the station")
+        XCTAssertTrue(DepartureDetection.isBeyondStation(origin: home, station: station, fix: fix(metersNorth: 5000)), "past it, so on a train")
+    }
+
+    func testIgnoredOutsideTripWindow() {
+        let train = target.addingTimeInterval(1200)
+        let early = target.addingTimeInterval(-3 * 3600)
+        XCTAssertFalse(DepartureDetection.hasLeft(origin: home, fix: fix(metersNorth: 2000), targetLeave: target, trainDeparture: train, now: early))
+        XCTAssertFalse(DepartureDetection.hasLeft(origin: home, fix: fix(metersNorth: 2000), targetLeave: target, trainDeparture: train, now: train.addingTimeInterval(60)))
     }
 }

@@ -46,6 +46,19 @@ services when the data source changes.
   the target time (morning: leave home; evening: leave work).
 - Too late = departure − minutes to the platform. Leave = too late − safety buffer. Get ready = leave − prep time.
 - Once the target train is too late, the plan rolls to the next catchable train.
+- The schedule shows every train type. Touch and hold a catchable train, then choose **Set as target**
+  to follow it for this trip. Touch and hold the selected train and choose **Back to automatic target**
+  to clear the override.
+  A manual target expires when it can no longer be caught or its commute window ends.
+- Touch and hold the station names above the card and choose **Other stations…** for a one-off
+  station-to-station route. The map and trains follow those stations, with zero home/work access time
+  and the usual platform buffer. **Back to my commute** returns to the saved route. Temporary stations
+  and train picks are cleared when the app closes; commute alert settings stay tied to the saved route.
+- Automatic selection rolls forward for four hours after the target leave time, then moves to
+  the next commute. Late evening windows continue across midnight. Tomorrow’s trains are labeled.
+- With location access (while using the app), leaving the starting place during a trip marks it as
+  departed: the card shows "You're on your way" / "You're on the train" and that trip's alerts stop.
+  Without access, nothing changes.
 - Door arrival = train arrival + minutes from the destination platform.
 
 ## Run
@@ -61,6 +74,6 @@ Debug launch arguments (scheme → Run → Arguments) for screenshots and testin
 
 ```
 -debugNow 2026-10-19T07:45:00-07:00   # fixed clock that then ticks
--debugPanel peek|medium|large         # initial sheet size
+-debugPanel collapsed|expanded       # initial sheet position
 -debugSettings YES                    # open Settings once loaded
 ```

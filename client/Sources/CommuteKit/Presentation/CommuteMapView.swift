@@ -5,6 +5,7 @@ import SwiftUI
 struct CommuteMapView: View {
     let profile: CommuteProfile
     let direction: Direction
+    let isTemporaryRoute: Bool
     /// Height covered by the sheet, so the route is framed in the visible part.
     let bottomInset: CGFloat
 
@@ -24,12 +25,12 @@ struct CommuteMapView: View {
                     .stroke(Color.blue, style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [5, 6]))
             }
 
-            if let home = profile.home.coordinate {
+            if !isTemporaryRoute, let home = profile.home.coordinate {
                 Annotation("Home", coordinate: home.clLocationCoordinate) {
                     pin("house.fill", color: .blue, isActive: direction == .homeToWork)
                 }
             }
-            if let work = profile.work.coordinate {
+            if !isTemporaryRoute, let work = profile.work.coordinate {
                 Annotation("Work", coordinate: work.clLocationCoordinate) {
                     pin("briefcase.fill", color: .purple, isActive: direction == .workToHome)
                 }
@@ -58,7 +59,8 @@ struct CommuteMapView: View {
     }
 
     private var accessLegs: [[CLLocationCoordinate2D]] {
-        [
+        if isTemporaryRoute { return [] }
+        return [
             (profile.home.coordinate, homeStation?.coordinate),
             (profile.work.coordinate, workStation?.coordinate)
         ].compactMap { place, station in

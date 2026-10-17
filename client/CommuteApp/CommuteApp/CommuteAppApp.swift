@@ -15,6 +15,7 @@ struct CommuteAppApp: App {
             factory: StandardServiceFactory(timetable: timetable, deviceAlerts: LocalLeaveAlertScheduler()),
             traffic: MapKitTrafficProvider(),
             access: MapKitStationAccessProvider(),
+            location: DeviceLocationProvider(),
             now: DebugLaunch.clock
         ))
     }
@@ -42,9 +43,9 @@ enum DebugLaunch {
 
     static var panelSize: DashboardView.PanelSize {
         #if DEBUG
-        UserDefaults.standard.string(forKey: "debugPanel").flatMap(DashboardView.PanelSize.init(rawValue:)) ?? .medium
+        UserDefaults.standard.string(forKey: "debugPanel").flatMap(DashboardView.PanelSize.init(rawValue:)) ?? .collapsed
         #else
-        .medium
+        .collapsed
         #endif
     }
 
