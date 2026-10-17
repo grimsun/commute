@@ -1,9 +1,110 @@
-# Commute
+<div align="center">
 
-Plans the Caltrain commute between home and work: which train to take, when to get ready,
-when to leave, and what to do when the train is missed.
+# 🚆 Commute
 
-| Folder | What it is |
+**Know exactly when to leave for the train.**
+
+A Caltrain commute planner for people who bike (or walk) to the station.
+It picks your train, counts down to when you need to be out the door, and
+rolls you onto the next train when you miss one.
+
+<img src="docs/screenshots/on-track.png" width="260" alt="On track: leave in 25 minutes for Limited 406">
+&nbsp;
+<img src="docs/screenshots/leave-now.png" width="260" alt="Leave now: too late after 8:13">
+&nbsp;
+<img src="docs/screenshots/next-train.png" width="260" alt="Missed the target train, rolled to Local 116 with a 5 minute delay">
+
+</div>
+
+---
+
+## The idea
+
+You don't care when the train departs. You care when you have to **leave the house**.
+
+Commute works backwards from the train, using how long *you* take to get to the platform:
+
+```
+  7:50 ─────────── 8:10 ──────── 8:13 ─────────────── 8:15
+  GET READY        LEAVE         TOO LATE              🚆 Limited 406 departs
+  │◄── 20 min prep ─►│◄─ 3 min ─►│◄─ 2 min ride + platform ─►│
+                       buffer
+```
+
+- **Target leave time.** Tell it when you'd like to leave home in the morning and work in the evening.
+  It follows the first train you'd catch leaving then.
+- **Get ready → Leave now → Too late.** The countdown moves through each stage as the minutes tick by.
+- **Missed it? No drama.** Past "too late", it moves to the next train you can still catch and tells you when to leave for that one.
+- **Delays and cancellations.** Predicted times replace the timetable; a cancelled target train hands over to the next one.
+
+## Features
+
+|  |  |
 |---|---|
-| [`client/`](client/) | iOS app (SwiftUI) and its Swift package |
-| [`server/`](server/) | Planned homelab service for live Caltrain data and push notifications |
+| 🚲 **Bike or walk** | Door-to-platform time from Apple Maps. Bike time uses the real route distance at *your* riding speed. |
+| 🚄 **Train types** | Local, Limited, Express, South County. Turn off the ones you'd never take, and they disappear from planning. |
+| 🗺️ **Map** | Your home, work, both stations and the rail line between them, with a draggable sheet in the style of Apple Maps. |
+| 🔁 **Both directions** | Flips to "To home" in the afternoon on its own; tap the header to switch by hand. |
+| 🚗 **Car check** | Driving time against free-flow traffic, for days when the train isn't the answer. |
+| ⚙️ **All 31 stations** | Pick an address and the nearest station is selected; override it if you ride to a faster stop. |
+
+<div align="center">
+<img src="docs/screenshots/evening.png" width="260" alt="Evening commute, to home">
+&nbsp;
+<img src="docs/screenshots/settings.png" width="260" alt="Settings: places, stations, target leave times">
+</div>
+
+## How it fits together
+
+```mermaid
+flowchart LR
+    subgraph phone["📱 iPhone"]
+        app["Commute app<br/>SwiftUI"]
+        maps["Apple Maps<br/>bike · walk · car"]
+    end
+    subgraph homelab["🏠 Homelab (planned)"]
+        server["Commute server<br/>Python"]
+    end
+    gtfs["Caltrain timetable<br/>GTFS"] --> server
+    rt["511.org<br/>realtime delays"] --> server
+    server -- "trains + plan<br/>(JSON API)" --> app
+    server -- "get ready / leave now<br/>push via ntfy" --> phone
+    maps --> app
+```
+
+Today the app runs on its own with a generated sample timetable. The server will add live
+Caltrain data and push notifications, and it will use the same planning rules as the app.
+Everything runs on free APIs; no billing account anywhere.
+
+## Repository
+
+| Folder | What's inside |
+|---|---|
+| [`client/`](client/) | The iOS app and its Swift package: `CommuteCore` (planner, models, tested on macOS) and `CommuteKit` (MapKit + SwiftUI) |
+| [`server/`](server/) | The homelab service: live Caltrain data and push notifications *(planned)* |
+
+## Getting started
+
+```bash
+git clone git@github.com:grimsun/commute.git
+cd commute/client
+swift test                                  # planner and model tests
+open CommuteApp/CommuteApp.xcodeproj        # run on an iPhone simulator
+```
+
+Requires Xcode 26+ and iOS 17+. See [`client/README.md`](client/README.md) for the architecture
+and the debug launch arguments used to take the screenshots above.
+
+## Roadmap
+
+- [x] Planner: target train, get ready / leave / too late, roll to next train
+- [x] Train types, all Caltrain stations, saved settings
+- [x] Map + bottom-sheet UI, car comparison
+- [ ] Homelab server: Caltrain GTFS + 511 realtime delays
+- [ ] Push notifications through ntfy, quiet once you've left
+- [ ] App reads live trains and alerts from the server
+- [ ] Leaving home or work detected automatically by location
+
+---
+
+<sub>Not affiliated with Caltrain. Schedules shown in the app are sample data until the server is live.</sub>
