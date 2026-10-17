@@ -95,16 +95,6 @@ open CommuteApp/CommuteApp.xcodeproj        # run on an iPhone simulator
 Requires Xcode 26+ and iOS 17+. See [`client/README.md`](client/README.md) for the architecture
 and the debug launch arguments used to take the screenshots above.
 
-## Roadmap
-
-- [x] Planner: target train, get ready / leave / too late, roll to next train
-- [x] Train types, all Caltrain stations, saved settings
-- [x] Map + bottom-sheet UI, car comparison
-- [ ] Server: Caltrain GTFS + 511 realtime delays
-- [ ] Push notifications through ntfy, quiet once you've left
-- [ ] App reads live trains and alerts from the server
-- [ ] Leaving home or work detected automatically by location
-
 ---
 
 <sub>Not affiliated with Caltrain. Schedules shown in the app are sample data until the server is live.</sub>
