@@ -5,7 +5,7 @@ import SwiftUI
 struct CommuteAppApp: App {
     @State private var viewModel = CommuteViewModel(
         planner: DefaultPlanner(
-            // Swap for the homelab server provider once it exists.
+            // Swap for a server-backed provider once the server exists.
             transit: SampleTransitProvider(),
             access: MapKitStationAccessProvider(),
             traffic: MapKitTrafficProvider()

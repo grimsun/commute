@@ -4,7 +4,7 @@ public enum SampleTransitError: Error, Equatable {
     case unknownStation(String)
 }
 
-/// A plausible, deterministic Caltrain-like day used until the homelab server provides live data.
+/// A plausible, deterministic Caltrain-like day used until the server provides live data.
 ///
 /// Weekdays: Locals every 30 minutes, Limited and Express trains at the peaks, South County
 /// trains between San Jose and Gilroy. Weekends: hourly Locals. Delays and the odd cancellation

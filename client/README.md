@@ -23,7 +23,7 @@
 - Bike time = Apple Maps walking-route distance at your bike speed (MapKit has no cycling mode);
   straight-line estimate if routing fails.
 
-Train data is a generated sample until the homelab server exists; swap `SampleTransitProvider`
+Train data is a generated sample until the server exists; swap `SampleTransitProvider`
 for a server-backed `TransitProvider`.
 
 ## Run

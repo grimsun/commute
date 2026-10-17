@@ -93,7 +93,7 @@ struct PlanPanel: View {
     private func footer(plan: CommutePlan) -> some View {
         VStack(spacing: 4) {
             if plan.transitSource == .sample {
-                Label("Sample schedule. Live Caltrain data will come from the homelab server.", systemImage: "info.circle")
+                Label("Sample schedule. Live Caltrain data will come from the server.", systemImage: "info.circle")
             }
             Text("Updated \(Format.time(plan.generatedAt))")
         }

@@ -1,6 +1,6 @@
 # Commute server (planned)
 
-A Python service for the homelab (`c1mm02`, Docker Compose) that will:
+A Python service, packaged to run anywhere with Docker, that will:
 
 - load the Caltrain GTFS timetable and 511.org GTFS-realtime delays
 - follow the same get ready → leave now → too late → next train rules as the app

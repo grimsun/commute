@@ -62,7 +62,7 @@ flowchart LR
         app["Commute app<br/>SwiftUI"]
         maps["Apple Maps<br/>bike · walk · car"]
     end
-    subgraph homelab["🏠 Homelab (planned)"]
+    subgraph backend["☁️ Server (planned)"]
         server["Commute server<br/>Python"]
     end
     gtfs["Caltrain timetable<br/>GTFS"] --> server
@@ -81,7 +81,7 @@ Everything runs on free APIs; no billing account anywhere.
 | Folder | What's inside |
 |---|---|
 | [`client/`](client/) | The iOS app and its Swift package: `CommuteCore` (planner, models, tested on macOS) and `CommuteKit` (MapKit + SwiftUI) |
-| [`server/`](server/) | The homelab service: live Caltrain data and push notifications *(planned)* |
+| [`server/`](server/) | The server: live Caltrain data and push notifications *(planned)* |
 
 ## Getting started
 
@@ -100,7 +100,7 @@ and the debug launch arguments used to take the screenshots above.
 - [x] Planner: target train, get ready / leave / too late, roll to next train
 - [x] Train types, all Caltrain stations, saved settings
 - [x] Map + bottom-sheet UI, car comparison
-- [ ] Homelab server: Caltrain GTFS + 511 realtime delays
+- [ ] Server: Caltrain GTFS + 511 realtime delays
 - [ ] Push notifications through ntfy, quiet once you've left
 - [ ] App reads live trains and alerts from the server
 - [ ] Leaving home or work detected automatically by location

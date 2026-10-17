@@ -1,6 +1,6 @@
 import Foundation
 
-/// Source of train departures. Today: `SampleTransitProvider`; later: the homelab server.
+/// Source of train departures. Today: `SampleTransitProvider`; later: the server.
 public protocol TransitProvider: Sendable {
     /// Trains that stop at `originID` and later at `destinationID`, departing at or after `after`,
     /// sorted by predicted departure. Cancelled trains are included and flagged.

@@ -88,7 +88,7 @@ public struct TrainDeparture: Codable, Equatable, Identifiable, Sendable {
 public enum TransitDataSource: String, Codable, Sendable {
     /// Generated locally; no live data behind it.
     case sample
-    /// Timetable plus realtime predictions (future homelab server).
+    /// Timetable plus realtime predictions (from the server).
     case live
 }
 
