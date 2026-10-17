@@ -144,6 +144,16 @@ final class LeaveAlertPlannerTests: XCTestCase {
         XCTAssertTrue(departed.isEmpty)
     }
 
+    func testArrivingAlertFiresBeforeTheStop() {
+        let arrival = at(19, 9, 14)
+        let train = TrainDeparture(tripID: "114", trainNumber: "114", service: .local, scheduledDeparture: at(19, 8, 25), scheduledArrival: arrival)
+        let alert = LeaveAlertPlanner.arrivingAlert(for: train, destination: StationCatalog.station(id: "palo_alto")!, key: CommuteKey(day: 20261019, direction: .homeToWork))
+
+        XCTAssertEqual(alert.kind, .arriving)
+        XCTAssertEqual(alert.fireDate, at(19, 9, 11))
+        XCTAssertEqual(alert.title, "Next stop: Palo Alto")
+    }
+
     func testNoAlertsOnNonCommuteDays() async {
         let (planner, profile) = alertPlanner()
         let alerts = await planner.alerts(profile: profile, now: at(20, 6), days: 6) // Tue through Sun

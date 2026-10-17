@@ -89,6 +89,13 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(Set(StationCatalog.all.map(\.id)).count, StationCatalog.all.count)
     }
 
+    func testNearestStationSkipsGameDayOnlyStanford() {
+        let stanfordQuad = Coordinate(latitude: 37.4275, longitude: -122.1697)
+        XCTAssertEqual(StationCatalog.nearest(to: stanfordQuad).id, "palo_alto")
+        let masonic = Coordinate(latitude: 37.7915, longitude: -122.4130)
+        XCTAssertEqual(StationCatalog.nearest(to: masonic).id, "san_francisco")
+    }
+
     func testStraightLineEstimate() {
         // 4 km at 16 km/h = 15 minutes.
         XCTAssertEqual(StraightLineAccessProvider.estimate(distanceMeters: 4000, mode: .bike, bikeSpeedKph: 16), 15 * 60, accuracy: 0.1)

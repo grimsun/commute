@@ -223,6 +223,17 @@ final class CommutePlannerTests: XCTestCase {
         XCTAssertEqual(plan.train?.attempts.tooLateAt, at(17, 35))
     }
 
+    func testBetterTrainIsAnExpressOvertakingTheLocal() async throws {
+        let local = TrainDeparture(tripID: "105", trainNumber: "105", service: .local, scheduledDeparture: at(8, 20), scheduledArrival: at(9, 10))
+        let express = TrainDeparture(tripID: "505", trainNumber: "505", service: .express, scheduledDeparture: at(8, 30), scheduledArrival: at(9, 0))
+        let earlierExpress = TrainDeparture(tripID: "503", trainNumber: "503", service: .express, scheduledDeparture: at(8, 10), scheduledArrival: at(8, 40))
+        let plan = try await planner([earlierExpress, local, express]).plan(profile: profile(), direction: .homeToWork, now: at(7, 0))
+
+        XCTAssertEqual(plan.betterTrain(than: local, preferred: [.local, .express])?.trainNumber, "505", "leaves later, arrives 10 min earlier")
+        XCTAssertNil(plan.betterTrain(than: local, preferred: [.local]), "only preferred services")
+        XCTAssertNil(plan.betterTrain(than: express, preferred: [.local, .express]), "nothing beats it without leaving earlier")
+    }
+
     func testSameStationIsRejected() async {
         var profile = profile()
         profile.workStationID = profile.homeStationID

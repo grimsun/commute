@@ -38,6 +38,9 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
     /// Where train data comes from.
     public var dataSource: DataSourceSettings
 
+    /// Show the trip countdown on the Lock Screen and in the Dynamic Island.
+    public var liveActivityEnabled: Bool
+
     public init(
         home: Place,
         work: Place,
@@ -55,7 +58,8 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         preferredServices: Set<TrainService> = Set(TrainService.allCases),
         carGoodDeltaMinutes: Int = 10,
         leaveAlertsEnabled: Bool = false,
-        dataSource: DataSourceSettings = DataSourceSettings()
+        dataSource: DataSourceSettings = DataSourceSettings(),
+        liveActivityEnabled: Bool = true
     ) {
         self.home = home
         self.work = work
@@ -74,6 +78,7 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         self.carGoodDeltaMinutes = carGoodDeltaMinutes
         self.leaveAlertsEnabled = leaveAlertsEnabled
         self.dataSource = dataSource
+        self.liveActivityEnabled = liveActivityEnabled
     }
 
     public static let `default` = CommuteProfile(
@@ -117,7 +122,7 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case home, work, homeStationID, workStationID, accessMode, bikeSpeedKph, homeStationMinutes, workStationMinutes
         case stationSafetyBufferMinutes, prepLeadTimeMinutes, morningTargetLeave, eveningTargetLeave, commuteDays
-        case preferredServices, carGoodDeltaMinutes, leaveAlertsEnabled, dataSource
+        case preferredServices, carGoodDeltaMinutes, leaveAlertsEnabled, dataSource, liveActivityEnabled
     }
 
     public init(from decoder: Decoder) throws {
@@ -140,5 +145,6 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         carGoodDeltaMinutes = try c.decodeIfPresent(Int.self, forKey: .carGoodDeltaMinutes) ?? d.carGoodDeltaMinutes
         leaveAlertsEnabled = try c.decodeIfPresent(Bool.self, forKey: .leaveAlertsEnabled) ?? d.leaveAlertsEnabled
         dataSource = try c.decodeIfPresent(DataSourceSettings.self, forKey: .dataSource) ?? d.dataSource
+        liveActivityEnabled = try c.decodeIfPresent(Bool.self, forKey: .liveActivityEnabled) ?? d.liveActivityEnabled
     }
 }

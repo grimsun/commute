@@ -58,8 +58,13 @@ public enum StationCatalog {
         all.firstIndex { $0.id == id }
     }
 
+    /// Stations without regular service: Stanford only opens for football game days.
+    public static let specialServiceOnly: Set<String> = ["stanford"]
+
+    /// The nearest station with regular service, for suggesting one from an address.
     public static func nearest(to coordinate: Coordinate) -> Station {
-        all.min { $0.coordinate.distance(to: coordinate) < $1.coordinate.distance(to: coordinate) } ?? all[0]
+        all.filter { !specialServiceOnly.contains($0.id) }
+            .min { $0.coordinate.distance(to: coordinate) < $1.coordinate.distance(to: coordinate) } ?? all[0]
     }
 
     private static func station(_ id: String, _ name: String, _ lat: Double, _ lon: Double) -> Station {

@@ -43,7 +43,12 @@ public struct DashboardView: View {
             profile: viewModel.routeProfile,
             isTemporaryRoute: viewModel.temporaryRoute != nil,
             bottomInset: collapsedHeight,
-            recenterRequest: recenterRequest
+            recenterRequest: recenterRequest,
+            trainPath: viewModel.trainPath,
+            trainDelay: TimeInterval(viewModel.plan?.train?.train.delaySeconds ?? 0),
+            isLive: viewModel.plan?.transitSource == .live,
+            now: viewModel.currentDate,
+            isVisible: !isExpanded
         )
         .ignoresSafeArea()
         .overlay(alignment: .top) {

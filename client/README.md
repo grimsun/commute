@@ -38,6 +38,7 @@ services when the data source changes.
   - `Presentation/`: map with a bottom-sheet plan, settings, address search
 - `Tests/CommuteCoreTests/`: planner, timetable (with a miniature GTFS fixture), services, alerts
 - `CommuteApp/`: the Xcode app target; `CommuteAppApp.swift` wires the implementations
+- `CommuteApp/CommuteWidgets/`: widget extension with the Lock Screen / Dynamic Island Live Activity
 
 ## Planning rules
 
@@ -46,8 +47,8 @@ services when the data source changes.
   the target time (morning: leave home; evening: leave work).
 - Too late = departure − minutes to the platform. Leave = too late − safety buffer. Get ready = leave − prep time.
 - Once the target train is too late, the plan rolls to the next catchable train.
-- The schedule shows every train type. Touch and hold a catchable train, then choose **Set as target**
-  to follow it for this trip. Touch and hold the selected train and choose **Back to automatic target**
+- The schedule shows every train type. Touch and hold a catchable train, then choose **Pin this train**
+  to follow it for this trip. Touch and hold the selected train and choose **Unpin**
   to clear the override.
   A manual target expires when it can no longer be caught or its commute window ends.
 - Touch and hold the station names above the card and choose **Other stations…** for a one-off

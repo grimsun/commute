@@ -122,6 +122,8 @@ enum Urgency: Hashable {
     case urgent
     /// Past too-late; a new plan is on its way.
     case missed
+    /// No leave guidance applies (the rider is elsewhere): informational only.
+    case neutral
 
     /// Minutes before the leave time when the countdown turns red.
     static let urgentLead: TimeInterval = 3 * 60
@@ -144,6 +146,7 @@ enum Urgency: Hashable {
         // A deep amber reads as yellow but stays legible on white.
         case .soon: Color(red: 0.85, green: 0.62, blue: 0.0)
         case .urgent, .missed: .red
+        case .neutral: .blue
         }
     }
 }

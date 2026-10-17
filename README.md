@@ -35,8 +35,9 @@ Commute works backwards from the train, using how long *you* take to get to the 
   It follows the first train you'd catch leaving then.
 - **Get ready → Leave now → Too late.** The countdown moves through each stage as the minutes tick by.
 - **Missed it? No drama.** Past "too late", it moves to the next train you can still catch and tells you when to leave for that one.
-- **Alerts.** "Get ready" and "Leave now" notifications, even with the app closed. With location access, the app notices you've left and the rest of the trip stays quiet; on the way it shows when your train leaves, and on board when it arrives.
-- **Your call.** Long-press any train in the list to make it the target instead.
+- **Alerts.** "Get ready" and "Leave now" notifications, even with the app closed. With location access, the app notices you've left and the rest of the trip stays quiet; on the way it shows when your train leaves, on board when it arrives, and a heads-up comes just before your stop.
+- **Lock Screen countdown.** A Live Activity counts down to leaving, to the train, then to arrival, in the Dynamic Island too.
+- **Your call.** Long-press any train in the list to pin it instead; tap it to see its stops. When an express would get you there sooner without leaving earlier, the card says so.
 - **Delays and cancellations** *(with the server).* Predicted times replace the timetable; a cancelled target train hands over to the next one.
 
 ## Features
@@ -46,7 +47,7 @@ Commute works backwards from the train, using how long *you* take to get to the 
 | 🚲 **Bike or walk** | Your door-to-platform minutes for each end, with an Apple Maps estimate to start from. Shows when you'll actually reach the door. |
 | 📅 **Real timetable** | Downloads Caltrain's published schedule on first launch and keeps it on the phone. Refresh any time in Settings. |
 | 🚄 **Train types** | Local, Limited, Express, South County. Turn off the ones you'd never take, and they disappear from planning. |
-| 🗺️ **Map** | Your home, work, both stations and the rail line between them, with a draggable sheet in the style of Apple Maps. |
+| 🗺️ **Map** | Your ride drawn along the real Caltrain track, with your train gliding along it (its scheduled position, or live with the server). |
 | 🔁 **Both directions** | Follows the morning trip until four hours after your target, then the evening one; tap ⇆ to switch by hand. |
 | 🚗 **Car check** | Driving time against free-flow traffic, for days when the train isn't the answer. |
 | ⚙️ **All 31 stations** | Pick an address and the nearest station is selected; override it if you ride to a faster stop. |

@@ -21,6 +21,8 @@ public struct CommuteKey: Codable, Hashable, Sendable {
 public struct LeaveAlert: Equatable, Sendable {
     public enum Kind: String, Sendable {
         case getReady, leaveNow, tooLate
+        /// On board, a few minutes before the rider's stop.
+        case arriving
     }
 
     public var id: String
@@ -115,6 +117,20 @@ public struct LeaveAlertPlanner: Sendable {
             ))
         }
         return alerts
+    }
+
+    /// Minutes before arrival that "your stop is next" fires.
+    public static let arrivingLead: TimeInterval = 3 * 60
+
+    /// "Next stop: Palo Alto" shortly before `train` reaches the rider's destination station.
+    public static func arrivingAlert(for train: TrainDeparture, destination: Station, key: CommuteKey) -> LeaveAlert {
+        LeaveAlert(
+            commute: key,
+            kind: .arriving,
+            fireDate: train.arrivalTime.addingTimeInterval(-arrivingLead),
+            title: "Next stop: \(destination.name)",
+            body: "Train \(train.trainNumber) arrives at \(time(train.arrivalTime)). Time to get ready to get off."
+        )
     }
 
     private static func time(_ date: Date) -> String {

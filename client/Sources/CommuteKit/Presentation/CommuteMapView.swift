@@ -9,11 +9,21 @@ struct CommuteMapView: View {
     let bottomInset: CGFloat
     /// Changes when the route should be re-framed, e.g. after the rider panned away and tapped refresh.
     var recenterRequest = 0
+    /// The train on the card: its track draws the ride, and it moves along it.
+    var trainPath: TrainPath? = nil
+    /// Realtime delay of that train; 0 with the timetable.
+    var trainDelay: TimeInterval = 0
+    /// Without live data the marker shows where the timetable says the train is.
+    var isLive = false
+    var now: () -> Date = Date.init
+    /// False while the sheet covers the map, so the train stops animating unseen.
+    var isVisible = true
 
     /// A place this close to its station is drawn as one pin, without a ride leg.
     private static let mergeDistance: Double = 200
 
     @State private var position: MapCameraPosition = .automatic
+    @State private var trainPosition: TrainPosition?
 
     private var homeStation: Station? { StationCatalog.station(id: profile.homeStationID) }
     private var workStation: Station? { StationCatalog.station(id: profile.workStationID) }
@@ -36,6 +46,13 @@ struct CommuteMapView: View {
                 MapPolyline(coordinates: accessLegs[index])
                     .stroke(Color.blue, style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [5, 6]))
             }
+            if let trainPosition, let trainPath {
+                // Arrow only: the train is already named on the card.
+                Annotation("Train \(trainPath.trainNumber)", coordinate: trainPosition.coordinate.clLocationCoordinate, anchor: .center) {
+                    trainMarker(heading: trainPosition.heading)
+                }
+                .annotationTitles(.hidden)
+            }
             ForEach(pins) { pin in
                 // Centered on the coordinate, same size for every pin: start and end are both
                 // part of every trip, so neither is singled out.
@@ -53,6 +70,28 @@ struct CommuteMapView: View {
                 position = .rect(boundingRect)
             }
         }
+        // Moves the train once a second; small steps read as gliding at map scale.
+        .task(id: "\(trainPath?.tripID ?? "")|\(isVisible)") {
+            while isVisible && !Task.isCancelled {
+                let next = trainPath?.position(at: now(), delay: trainDelay)
+                withAnimation(.linear(duration: 1)) {
+                    trainPosition = next
+                }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    /// The ride's ends in the train's direction of travel.
+    private var originStationID: String {
+        guard let trainPath,
+              let home = trainPath.stops.firstIndex(where: { $0.stationID == profile.homeStationID }),
+              let work = trainPath.stops.firstIndex(where: { $0.stationID == profile.workStationID }) else { return profile.homeStationID }
+        return home < work ? profile.homeStationID : profile.workStationID
+    }
+
+    private var destinationStationID: String {
+        originStationID == profile.homeStationID ? profile.workStationID : profile.homeStationID
     }
 
     private var pins: [Pin] {
@@ -75,8 +114,14 @@ struct CommuteMapView: View {
         return pins
     }
 
-    /// The rail segment following the stations in between, so it traces the real line.
+    /// The ride along the real track when the train's path is known, else through the stations.
     private var railLine: [CLLocationCoordinate2D]? {
+        if let trainPath {
+            let track = trainPath.line(from: originStationID, to: destinationStationID)
+            if track.count >= 2 {
+                return track.map(\.clLocationCoordinate)
+            }
+        }
         guard let from = StationCatalog.index(of: profile.homeStationID),
               let to = StationCatalog.index(of: profile.workStationID),
               from != to else { return nil }
@@ -108,6 +153,17 @@ struct CommuteMapView: View {
             .reduce(MKMapRect.null) { $0.union(MKMapRect(origin: $1, size: MKMapSize(width: 1, height: 1))) }
         let padding = max(rect.size.width, rect.size.height) * 0.2 + 2_000
         return rect.insetBy(dx: -padding, dy: -padding)
+    }
+
+    private func trainMarker(heading: Double) -> some View {
+        Image(systemName: "location.north.fill")
+            .font(.system(size: 14, weight: .bold))
+            .foregroundStyle(.white)
+            .rotationEffect(.degrees(heading))
+            .frame(width: 30, height: 30)
+            .background(Color.black.opacity(0.8), in: Circle())
+            .overlay(Circle().stroke(.white, lineWidth: 2))
+            .shadow(color: .black.opacity(0.3), radius: 4, y: 1)
     }
 
     private func marker(_ pin: Pin) -> some View {

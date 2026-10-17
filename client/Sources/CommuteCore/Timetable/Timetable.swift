@@ -3,20 +3,23 @@ import Foundation
 /// The parts of a Caltrain GTFS feed needed to answer "which trains go from A to B after T".
 public struct Timetable: Codable, Equatable, Sendable {
     /// Bump when the cached format changes; older caches are discarded.
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public var schemaVersion: Int
     public var downloadedAt: Date
     public var feedVersion: String?
     public var services: [String: ServiceCalendar]
     public var trips: [Trip]
+    /// Track geometry by GTFS shape id, in travel order.
+    public var shapes: [String: [Coordinate]]
 
-    public init(downloadedAt: Date, feedVersion: String?, services: [String: ServiceCalendar], trips: [Trip]) {
+    public init(downloadedAt: Date, feedVersion: String?, services: [String: ServiceCalendar], trips: [Trip], shapes: [String: [Coordinate]] = [:]) {
         self.schemaVersion = Self.currentSchemaVersion
         self.downloadedAt = downloadedAt
         self.feedVersion = feedVersion
         self.services = services
         self.trips = trips
+        self.shapes = shapes
     }
 
     public struct ServiceCalendar: Codable, Equatable, Sendable {
@@ -54,13 +57,15 @@ public struct Timetable: Codable, Equatable, Sendable {
         public var serviceID: String
         /// In travel order.
         public var stops: [Stop]
+        public var shapeID: String?
 
-        public init(id: String, number: String, service: TrainService, serviceID: String, stops: [Stop]) {
+        public init(id: String, number: String, service: TrainService, serviceID: String, stops: [Stop], shapeID: String? = nil) {
             self.id = id
             self.number = number
             self.service = service
             self.serviceID = serviceID
             self.stops = stops
+            self.shapeID = shapeID
         }
     }
 

@@ -35,10 +35,14 @@ public enum DepartureDetection {
         origin.distance(to: fix.coordinate) > origin.distance(to: station) + beyondStationMargin + max(0, fix.accuracy)
     }
 
+    /// Clearly away from `origin`: a vague fix must clear the radius by its own uncertainty.
+    public static func isAway(from origin: Coordinate, fix: LocationFix) -> Bool {
+        origin.distance(to: fix.coordinate) > leaveRadius + max(0, fix.accuracy)
+    }
+
+    /// Away from the starting place during the trip window, so the rider has set off.
     public static func hasLeft(origin: Coordinate, fix: LocationFix, targetLeave: Date, trainDeparture: Date, now: Date) -> Bool {
         guard now >= targetLeave.addingTimeInterval(-window), now <= trainDeparture else { return false }
-        // A vague fix must clear the radius by its own uncertainty.
-        let threshold = leaveRadius + max(0, fix.accuracy)
-        return origin.distance(to: fix.coordinate) > threshold
+        return isAway(from: origin, fix: fix)
     }
 }

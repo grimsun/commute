@@ -16,6 +16,7 @@ struct CommuteAppApp: App {
             traffic: MapKitTrafficProvider(),
             access: MapKitStationAccessProvider(),
             location: DeviceLocationProvider(),
+            liveActivity: SystemLiveActivities(),
             now: DebugLaunch.clock
         ))
     }

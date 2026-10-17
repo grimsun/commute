@@ -8,7 +8,7 @@ public enum GTFSError: Error, Equatable {
 /// Turns the GTFS text files of a Caltrain feed into a `Timetable`.
 public enum GTFSParser {
     public static let requiredFiles = ["stops.txt", "routes.txt", "trips.txt", "stop_times.txt"]
-    public static let optionalFiles = ["calendar.txt", "calendar_dates.txt", "feed_info.txt"]
+    public static let optionalFiles = ["calendar.txt", "calendar_dates.txt", "feed_info.txt", "shapes.txt"]
 
     public static func parse(archive: ZipArchive, downloadedAt: Date) throws -> Timetable {
         var files: [String: Data] = [:]
@@ -47,12 +47,13 @@ public enum GTFSParser {
         }
 
         let tripsTable = try table("trips.txt")
-        var tripInfo: [String: (number: String, service: TrainService, serviceID: String)] = [:]
+        var tripInfo: [String: (number: String, service: TrainService, serviceID: String, shapeID: String?)] = [:]
         for row in tripsTable.rows {
             guard let service = routeService[tripsTable.value(row, "route_id")] else { continue }
             let id = tripsTable.value(row, "trip_id")
             let shortName = tripsTable.value(row, "trip_short_name")
-            tripInfo[id] = (shortName.isEmpty ? id : shortName, service, tripsTable.value(row, "service_id"))
+            let shapeID = tripsTable.value(row, "shape_id")
+            tripInfo[id] = (shortName.isEmpty ? id : shortName, service, tripsTable.value(row, "service_id"), shapeID.isEmpty ? nil : shapeID)
         }
 
         let stopTimes = try table("stop_times.txt")
@@ -81,7 +82,8 @@ public enum GTFSParser {
                 number: info.number,
                 service: info.service,
                 serviceID: info.serviceID,
-                stops: stops.sorted { $0.sequence < $1.sequence }.map(\.stop)
+                stops: stops.sorted { $0.sequence < $1.sequence }.map(\.stop),
+                shapeID: info.shapeID
             )
         }
         .sorted { $0.id < $1.id }
@@ -122,7 +124,21 @@ public enum GTFSParser {
             feedVersion = info.rows.first.map { info.value($0, "feed_version") }.flatMap { $0.isEmpty ? nil : $0 }
         }
 
-        return Timetable(downloadedAt: downloadedAt, feedVersion: feedVersion, services: services, trips: trips)
+        var shapes: [String: [Coordinate]] = [:]
+        if files["shapes.txt"] != nil {
+            let table = try table("shapes.txt")
+            var points: [String: [(sequence: Int, coordinate: Coordinate)]] = [:]
+            for row in table.rows {
+                guard let lat = Double(table.value(row, "shape_pt_lat")),
+                      let lon = Double(table.value(row, "shape_pt_lon")) else { continue }
+                points[table.value(row, "shape_id"), default: []].append(
+                    (Int(table.value(row, "shape_pt_sequence")) ?? 0, Coordinate(latitude: lat, longitude: lon))
+                )
+            }
+            shapes = points.mapValues { $0.sorted { $0.sequence < $1.sequence }.map(\.coordinate) }
+        }
+
+        return Timetable(downloadedAt: downloadedAt, feedVersion: feedVersion, services: services, trips: trips, shapes: shapes)
     }
 
     /// "HH:MM:SS" to seconds; hours may exceed 23 for trips past midnight.

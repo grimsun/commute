@@ -264,6 +264,7 @@ struct SettingsView: View {
 
     private var alertsSection: some View {
         Section {
+            Toggle("Lock Screen countdown", isOn: $draft.liveActivityEnabled)
             if draft.dataSource.mode == .standalone {
                 Toggle("Get ready & leave now alerts", isOn: $draft.leaveAlertsEnabled)
             } else {

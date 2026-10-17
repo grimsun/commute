@@ -114,6 +114,54 @@ final class TimetableTests: XCTestCase {
         XCTAssertEqual(earlyTuesday.first?.tripID, lateMonday.first?.tripID)
     }
 
+    // MARK: Train paths
+
+    func testTrainPathPlacesTrainBetweenAndAtStops() throws {
+        let timetable = try Self.fixtureTimetable()
+        let departure = try XCTUnwrap(timetable.departures(from: "san_francisco", to: "palo_alto", after: at(19, 7), limit: 1, calendar: calendar).first)
+        let path = try XCTUnwrap(timetable.path(for: departure, calendar: calendar))
+
+        XCTAssertEqual(path.stops.map(\.stationID), ["san_francisco", "place_MLBR", "palo_alto"])
+        XCTAssertNil(path.position(at: at(19, 7, 59)), "not started")
+        XCTAssertNil(path.position(at: at(19, 8, 51)), "finished")
+
+        let dwelling = try XCTUnwrap(path.position(at: at(19, 8, 20).addingTimeInterval(30)))
+        XCTAssertEqual(dwelling.stationID, "place_MLBR")
+
+        let between = try XCTUnwrap(path.position(at: at(19, 8, 10)))
+        XCTAssertNil(between.stationID)
+        let sf = StationCatalog.station(id: "san_francisco")!.coordinate
+        let millbrae = StationCatalog.station(id: "place_MLBR")!.coordinate
+        XCTAssertLessThan(between.coordinate.latitude, sf.latitude)
+        XCTAssertGreaterThan(between.coordinate.latitude, millbrae.latitude)
+        XCTAssertTrue((90...270).contains(between.heading), "heading south, got \(between.heading)")
+
+        let delayed = try XCTUnwrap(path.position(at: at(19, 8, 15), delay: 5 * 60))
+        XCTAssertEqual(delayed.coordinate, between.coordinate, accuracy: 1e-9)
+    }
+
+    func testNextStopWhileRiding() throws {
+        let timetable = try Self.fixtureTimetable()
+        let departure = try XCTUnwrap(timetable.departures(from: "san_francisco", to: "palo_alto", after: at(19, 7), limit: 1, calendar: calendar).first)
+        let path = try XCTUnwrap(timetable.path(for: departure, calendar: calendar))
+
+        XCTAssertEqual(path.nextStop(at: at(19, 8, 10))?.stationID, "place_MLBR")
+        XCTAssertEqual(path.nextStop(at: at(19, 8, 20).addingTimeInterval(30))?.stationID, "palo_alto", "dwelling at Millbrae, so Palo Alto is next")
+        XCTAssertEqual(path.nextStop(at: at(19, 8, 22), delay: 5 * 60)?.stationID, "place_MLBR", "running 5 min late")
+        XCTAssertNil(path.nextStop(at: at(19, 8, 51)))
+    }
+
+    func testTrainPathSegmentBetweenStations() throws {
+        let timetable = try Self.fixtureTimetable()
+        let departure = try XCTUnwrap(timetable.departures(from: "san_francisco", to: "palo_alto", after: at(19, 7), limit: 1, calendar: calendar).first)
+        let path = try XCTUnwrap(timetable.path(for: departure, calendar: calendar))
+
+        XCTAssertEqual(path.stops(from: "place_MLBR", to: "palo_alto").map(\.stationID), ["place_MLBR", "palo_alto"])
+        let line = path.line(from: "san_francisco", to: "palo_alto")
+        XCTAssertGreaterThanOrEqual(line.count, 2)
+        XCTAssertEqual(line.first?.latitude ?? 0, StationCatalog.station(id: "san_francisco")!.coordinate.latitude, accuracy: 1e-6)
+    }
+
     // MARK: Store
 
     func testStoreDownloadsOnceThenUsesMemoryAndDisk() async throws {
@@ -204,7 +252,15 @@ final class RealFeedTests: XCTestCase {
         XCTAssertGreaterThan(timetable.trips.count, 100)
         XCTAssertFalse(trains.isEmpty)
         XCTAssertTrue(Set(trains.map(\.service)).isSubset(of: Set(TrainService.allCases)))
+        XCTAssertFalse(timetable.shapes.isEmpty, "the feed carries track shapes")
+        let trainPath = try XCTUnwrap(timetable.path(for: XCTUnwrap(trains.first), calendar: calendar))
+        XCTAssertGreaterThan(trainPath.line.count, trainPath.stops.count, "drawn along the real track")
         let unknown = Set(timetable.trips.flatMap { $0.stops.map(\.station) }).subtracting(StationCatalog.all.map(\.id))
         XCTAssertTrue(unknown.isEmpty, "stations missing from StationCatalog: \(unknown)")
     }
+}
+
+private func XCTAssertEqual(_ a: Coordinate, _ b: Coordinate, accuracy: Double, file: StaticString = #filePath, line: UInt = #line) {
+    XCTAssertEqual(a.latitude, b.latitude, accuracy: accuracy, file: file, line: line)
+    XCTAssertEqual(a.longitude, b.longitude, accuracy: accuracy, file: file, line: line)
 }

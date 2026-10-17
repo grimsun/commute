@@ -141,6 +141,22 @@ public struct CommutePlan: Equatable, Sendable {
         train.arrivalTime.addingTimeInterval(egressTime)
     }
 
+    /// Minimum arrival gain for suggesting another train.
+    public static let betterTrainMinimumGain: TimeInterval = 5 * 60
+
+    /// A preferred train that lets the rider leave no earlier than for `current` yet arrives at least
+    /// `betterTrainMinimumGain` sooner, e.g. an express overtaking a local. The soonest arrival wins.
+    public func betterTrain(than current: TrainDeparture, preferred: Set<TrainService>) -> TrainDeparture? {
+        let currentLeave = attempts(for: current).leaveAt
+        return upcoming
+            .filter {
+                $0.id != current.id && !$0.isCancelled && preferred.contains($0.service)
+                    && attempts(for: $0).leaveAt >= currentLeave
+                    && $0.arrivalTime <= current.arrivalTime.addingTimeInterval(-Self.betterTrainMinimumGain)
+            }
+            .min { $0.arrivalTime < $1.arrivalTime }
+    }
+
     public func isCatchable(_ train: TrainDeparture, at now: Date) -> Bool {
         !train.isCancelled && now <= attempts(for: train).tooLateAt
     }
