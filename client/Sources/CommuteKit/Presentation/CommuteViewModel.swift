@@ -220,8 +220,10 @@ public final class CommuteViewModel {
             await refresh()
             return
         }
-        // Both directions are already planned; just show the other one.
-        direction = direction.reversed
+        // Both directions are already planned; just show the other one, crossfading.
+        withAnimation(.smooth(duration: 0.3)) {
+            direction = direction.reversed
+        }
         pinnedDirection = (direction, activeCommute(at: now()))
     }
 
@@ -426,16 +428,14 @@ public final class CommuteViewModel {
         await rescheduleAlerts()
     }
 
-    /// The train the rider left for (or is on), until they reach the destination door.
-    /// `nil` when not known to be travelling, which leaves the normal plan on screen.
-    public var tripInProgress: TrainDeparture? {
+    /// The train the rider left for (or is on), when location showed they left. The view
+    /// drops it once the door-arrival time passes, so the cutoff follows its own clock tick.
+    public var departedTrain: TrainDeparture? {
         guard temporaryRoute == nil, hasDepartedCurrentCommute, let plan else { return nil }
-        let date = now()
         // After a relaunch only the departure is remembered; infer the train from the timetable.
-        guard let train = departedTrains[currentCommute]
-            ?? Self.likelyRidingTrain(in: plan, profile: profile, now: date)
-            ?? plan.train?.train else { return nil }
-        return date < plan.doorArrival(for: train) ? train : nil
+        return departedTrains[currentCommute]
+            ?? Self.likelyRidingTrain(in: plan, profile: profile, now: now())
+            ?? plan.train?.train
     }
 
     private func loadDepartures() async {

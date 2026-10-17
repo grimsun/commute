@@ -16,14 +16,15 @@ struct PlanPanel: View {
 
     private static let topID = "top"
     /// How often the card re-evaluates countdowns, colors and row states between refreshes.
-    private static let tick: TimeInterval = 5
+    /// Cheap enough to do every second, so stage changes land on time.
+    private static let tick: TimeInterval = 1
 
     var body: some View {
         // Read observable state here, outside the TimelineView, so changes redraw at once
         // instead of waiting for the next tick.
         let plan = viewModel.plan
         let routeProfile = viewModel.routeProfile
-        let tripInProgress = viewModel.tripInProgress
+        let departedTrain = viewModel.departedTrain
         let errorMessage = viewModel.errorMessage
         let isDownloading = viewModel.timetableInfo == nil
         let isTemporaryRoute = viewModel.temporaryRoute != nil
@@ -31,6 +32,10 @@ struct PlanPanel: View {
             ScrollView {
                 SwiftUI.TimelineView(.periodic(from: .now, by: Self.tick)) { _ in
                     let now = viewModel.currentDate()
+                    // Travelling until the door-arrival time; evaluated every tick so it ends on time.
+                    let tripInProgress = departedTrain.flatMap { train in
+                        plan.map { now < $0.doorArrival(for: train) } == true ? train : nil
+                    }
                     VStack(spacing: 14) {
                         VStack(spacing: 12) {
                             header
@@ -67,7 +72,10 @@ struct PlanPanel: View {
                                     Task { await viewModel.clearPick() }
                                 }
                             )
-                            CarCard(plan: plan)
+                            // Driving is moot once you're on your way.
+                            if tripInProgress == nil {
+                                CarCard(plan: plan, now: now)
+                            }
                             footer(plan: plan)
                         }
                     }
@@ -625,6 +633,9 @@ private struct UpcomingTrainsCard: View {
         let status = RowStatus(train: train, plan: plan, now: now)
         let isTarget = train.id == highlightedID
         return TrainRow(train: train, plan: plan, now: now, status: status, isTarget: isTarget, isTaking: isTarget && isTripInProgress, showsCountdown: showsCountdown)
+            // The long-press preview lifts the row; give it the card's surface and rounded corners.
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .roundedContextMenuPreview()
             .contentShape(Rectangle())
             .contextMenu {
                 if status == .catchable && !isTarget {
@@ -750,6 +761,7 @@ private struct TrainRow: View {
 
 private struct CarCard: View {
     let plan: CommutePlan
+    let now: Date
 
     var body: some View {
         Card {
@@ -764,7 +776,7 @@ private struct CarCard: View {
                         GridRow(alignment: .firstTextBaseline) {
                             Text("Driving \(Format.minutes(car.eta))")
                                 .font(.headline)
-                            Text("Arrive \(Format.time(plan.generatedAt.addingTimeInterval(car.eta)))")
+                            Text("Arrive \(Format.time(now.addingTimeInterval(car.eta)))")
                                 .font(.subheadline.weight(.semibold))
                                 .monospacedDigit()
                                 .gridColumnAlignment(.trailing)
@@ -792,5 +804,17 @@ private struct CarCard: View {
                 }
             }
         }
+    }
+}
+
+private extension View {
+    /// Rounded corners for the lifted row in a long-press preview (iOS only).
+    @ViewBuilder
+    func roundedContextMenuPreview() -> some View {
+        #if os(iOS)
+        contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 10, style: .continuous))
+        #else
+        self
+        #endif
     }
 }

@@ -16,6 +16,7 @@ public struct DashboardView: View {
     /// Fits the header and next-train card; updated as their content changes.
     @State private var collapsedHeight: CGFloat = 380
     @State private var hasMeasuredCollapsedHeight = false
+    @State private var recenterRequest = 0
     private let showsSettingsOnLaunch: Bool
 
     public init(viewModel: CommuteViewModel, panelSize: PanelSize = .collapsed, showsSettings: Bool = false) {
@@ -40,16 +41,15 @@ public struct DashboardView: View {
     public var body: some View {
         CommuteMapView(
             profile: viewModel.routeProfile,
-            direction: viewModel.direction,
             isTemporaryRoute: viewModel.temporaryRoute != nil,
-            bottomInset: collapsedHeight
+            bottomInset: collapsedHeight,
+            recenterRequest: recenterRequest
         )
         .ignoresSafeArea()
         .overlay(alignment: .top) {
-            HStack {
-                settingsButton
-                Spacer()
-                refreshButton
+            // A separate view, so refresh progress redraws only the buttons, not the map.
+            MapControls(viewModel: viewModel, isSettingsPresented: $isSettingsPresented) {
+                recenterRequest += 1
             }
             .padding(.horizontal, 16)
             .padding(.top, 4)
@@ -110,30 +110,46 @@ public struct DashboardView: View {
             }
         }
     }
+}
 
-    private var settingsButton: some View {
-        Button {
-            isSettingsPresented = true
-        } label: {
-            mapButtonLabel(Image(systemName: "gearshape.fill"))
+/// Settings (left) and refresh (right) over the map.
+private struct MapControls: View {
+    let viewModel: CommuteViewModel
+    @Binding var isSettingsPresented: Bool
+    let onRefresh: () -> Void
+
+    @State private var spin = 0.0
+
+    var body: some View {
+        HStack {
+            Button {
+                isSettingsPresented = true
+            } label: {
+                label(Image(systemName: "gearshape.fill"))
+            }
+            .buttonStyle(.plain)
+            .disabled(!viewModel.isLoaded)
+            .accessibilityLabel("Settings")
+
+            Spacer()
+
+            Button {
+                // One full turn as feedback; refreshes are usually too quick for a spinner.
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    spin += 360
+                }
+                onRefresh()
+                Task { await viewModel.refresh() }
+            } label: {
+                label(Image(systemName: "arrow.clockwise").rotationEffect(.degrees(spin)))
+            }
+            .buttonStyle(.plain)
+            .disabled(!viewModel.isLoaded)
+            .accessibilityLabel("Refresh and recenter")
         }
-        .buttonStyle(.plain)
-        .disabled(!viewModel.isLoaded)
-        .accessibilityLabel("Settings")
     }
 
-    private var refreshButton: some View {
-        Button {
-            Task { await viewModel.refresh() }
-        } label: {
-            mapButtonLabel(viewModel.isRefreshing ? AnyView(ProgressView()) : AnyView(Image(systemName: "arrow.clockwise")))
-        }
-        .buttonStyle(.plain)
-        .disabled(!viewModel.isLoaded || viewModel.isRefreshing)
-        .accessibilityLabel("Refresh")
-    }
-
-    private func mapButtonLabel(_ content: some View) -> some View {
+    private func label(_ content: some View) -> some View {
         content
             .font(.system(size: 18, weight: .semibold))
             .foregroundStyle(.primary)
