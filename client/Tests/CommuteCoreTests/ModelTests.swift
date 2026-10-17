@@ -12,9 +12,24 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(profile.morningTargetLeave, CommuteProfile.default.morningTargetLeave)
     }
 
+    func testProfileDecodingIgnoresRemovedFields() throws {
+        let json = #"{"accessOverheadMinutes":2,"homeStationMinutes":7}"#
+        let profile = try JSONDecoder().decode(CommuteProfile.self, from: Data(json.utf8))
+        XCTAssertEqual(profile.homeStationMinutes, 7)
+        XCTAssertEqual(profile.dataSource.mode, .standalone)
+    }
+
+    func testServerURLValidation() {
+        XCTAssertEqual(DataSourceSettings(mode: .server, serverURL: " http://192.168.1.57:8080 ").parsedServerURL?.host, "192.168.1.57")
+        XCTAssertNil(DataSourceSettings(mode: .server, serverURL: "not a url").parsedServerURL)
+        XCTAssertNil(DataSourceSettings(mode: .server, serverURL: "ftp://example.com").parsedServerURL)
+    }
+
     func testProfileRoundTrips() throws {
         var profile = CommuteProfile.default
         profile.accessMode = .walk
+        profile.dataSource = DataSourceSettings(mode: .server, serverURL: "https://commute.example.com")
+        profile.commuteDays = [2, 4]
         profile.eveningTargetLeave = TimeOfDay(hour: 18, minute: 5)
         let data = try JSONEncoder().encode(profile)
         XCTAssertEqual(try JSONDecoder().decode(CommuteProfile.self, from: data), profile)

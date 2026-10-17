@@ -21,11 +21,12 @@ final class CommutePlannerTests: XCTestCase {
         )
     }
 
-    /// Target 8:00, 8 min ride + 2 overhead = 10 min access, 3 min buffer, 20 min prep.
+    /// Target 8:00, 10 min home ↔ station, 15 min work ↔ station, 3 min buffer, 20 min prep.
     private func profile(services: Set<TrainService> = Set(TrainService.allCases)) -> CommuteProfile {
         var profile = CommuteProfile.default
         profile.morningTargetLeave = TimeOfDay(hour: 8, minute: 0)
-        profile.accessOverheadMinutes = 2
+        profile.homeStationMinutes = 10
+        profile.workStationMinutes = 15
         profile.stationSafetyBufferMinutes = 3
         profile.prepLeadTimeMinutes = 20
         profile.preferredServices = services
@@ -35,7 +36,6 @@ final class CommutePlannerTests: XCTestCase {
     private func planner(_ trains: [TrainDeparture], car: TrafficProvider? = nil) -> DefaultPlanner {
         DefaultPlanner(
             transit: FixedTransitProvider(departures: trains),
-            access: FixedAccessProvider(seconds: 8 * 60),
             traffic: car,
             calendar: calendar
         )
@@ -140,6 +140,19 @@ final class CommutePlannerTests: XCTestCase {
         XCTAssertEqual(plan.originStation.id, "palo_alto")
         XCTAssertEqual(plan.destinationStation.id, "san_francisco")
         XCTAssertEqual(plan.train?.train.trainNumber, "202")
+    }
+
+    func testDoorArrivalAddsStationToDoorMinutes() async throws {
+        let plan = try await planner([train("103", departs: at(8, 20))]).plan(profile: profile(), direction: .homeToWork, now: at(7, 0))
+        let option = try XCTUnwrap(plan.train)
+
+        // Arrives at the station 9:05, then 15 minutes to work.
+        XCTAssertEqual(plan.doorArrival(for: option.train), at(9, 20))
+    }
+
+    func testEveningUsesWorkStationMinutesForAccess() async throws {
+        let plan = try await planner([train("202", departs: at(17, 50))]).plan(profile: profile(), direction: .workToHome, now: at(16, 0))
+        XCTAssertEqual(plan.train?.attempts.tooLateAt, at(17, 35))
     }
 
     func testSameStationIsRejected() async {

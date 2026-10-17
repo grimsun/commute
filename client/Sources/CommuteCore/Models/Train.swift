@@ -86,9 +86,11 @@ public struct TrainDeparture: Codable, Equatable, Identifiable, Sendable {
 }
 
 public enum TransitDataSource: String, Codable, Sendable {
-    /// Generated locally; no live data behind it.
+    /// Generated locally; for previews and tests.
     case sample
-    /// Timetable plus realtime predictions (from the server).
+    /// The published Caltrain timetable, without realtime changes.
+    case timetable
+    /// Timetable plus realtime predictions from the server.
     case live
 }
 
@@ -96,10 +98,13 @@ public struct TransitSnapshot: Equatable, Sendable {
     public var departures: [TrainDeparture]
     public var source: TransitDataSource
     public var fetchedAt: Date
+    /// Something the rider should know about the data, such as a server fallback.
+    public var notice: String?
 
-    public init(departures: [TrainDeparture], source: TransitDataSource, fetchedAt: Date) {
+    public init(departures: [TrainDeparture], source: TransitDataSource, fetchedAt: Date, notice: String? = nil) {
         self.departures = departures
         self.source = source
         self.fetchedAt = fetchedAt
+        self.notice = notice
     }
 }

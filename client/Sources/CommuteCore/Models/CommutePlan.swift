@@ -71,8 +71,10 @@ public struct CommutePlan: Equatable, Sendable {
     public var originStation: Station
     public var destinationStation: Station
     public var targetLeave: Date
-    /// Door-to-platform time: ride or walk plus overhead.
+    /// Door to origin platform.
     public var accessTime: TimeInterval
+    /// Destination platform to door.
+    public var egressTime: TimeInterval
     public var safetyBuffer: TimeInterval
     public var prepLeadTime: TimeInterval
     /// `nil` when no preferred train is left today.
@@ -83,6 +85,7 @@ public struct CommutePlan: Equatable, Sendable {
     public var hiddenTrainCount: Int
     public var transitSource: TransitDataSource
     public var transitFetchedAt: Date
+    public var transitNotice: String?
     /// `nil` when car routing is unavailable.
     public var car: CarOption?
 
@@ -93,6 +96,7 @@ public struct CommutePlan: Equatable, Sendable {
         destinationStation: Station,
         targetLeave: Date,
         accessTime: TimeInterval,
+        egressTime: TimeInterval,
         safetyBuffer: TimeInterval,
         prepLeadTime: TimeInterval,
         train: TrainOption?,
@@ -100,6 +104,7 @@ public struct CommutePlan: Equatable, Sendable {
         hiddenTrainCount: Int,
         transitSource: TransitDataSource,
         transitFetchedAt: Date,
+        transitNotice: String? = nil,
         car: CarOption?
     ) {
         self.generatedAt = generatedAt
@@ -108,6 +113,7 @@ public struct CommutePlan: Equatable, Sendable {
         self.destinationStation = destinationStation
         self.targetLeave = targetLeave
         self.accessTime = accessTime
+        self.egressTime = egressTime
         self.safetyBuffer = safetyBuffer
         self.prepLeadTime = prepLeadTime
         self.train = train
@@ -115,6 +121,7 @@ public struct CommutePlan: Equatable, Sendable {
         self.hiddenTrainCount = hiddenTrainCount
         self.transitSource = transitSource
         self.transitFetchedAt = transitFetchedAt
+        self.transitNotice = transitNotice
         self.car = car
     }
 
@@ -125,6 +132,11 @@ public struct CommutePlan: Equatable, Sendable {
             safetyBuffer: safetyBuffer,
             prepLeadTime: prepLeadTime
         )
+    }
+
+    /// When the rider reaches the destination door on this train.
+    public func doorArrival(for train: TrainDeparture) -> Date {
+        train.arrivalTime.addingTimeInterval(egressTime)
     }
 
     public func isCatchable(_ train: TrainDeparture, at now: Date) -> Bool {

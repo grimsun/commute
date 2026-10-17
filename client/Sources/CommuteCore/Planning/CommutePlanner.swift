@@ -16,18 +16,11 @@ public enum PlannerError: Error, Equatable {
 /// get ready → leave now. Once it is not, the plan rolls to the next catchable train.
 public struct DefaultPlanner: CommutePlanning {
     private let transit: TransitProvider
-    private let access: StationAccessProvider
     private let traffic: TrafficProvider?
     private let calendar: Calendar
 
-    public init(
-        transit: TransitProvider,
-        access: StationAccessProvider,
-        traffic: TrafficProvider?,
-        calendar: Calendar = .caltrain
-    ) {
+    public init(transit: TransitProvider, traffic: TrafficProvider?, calendar: Calendar = .caltrain) {
         self.transit = transit
-        self.access = access
         self.traffic = traffic
         self.calendar = calendar
     }
@@ -45,29 +38,29 @@ public struct DefaultPlanner: CommutePlanning {
             throw PlannerError.sameStation
         }
 
-        let origin = profile.origin(for: direction)
-        let destination = profile.destination(for: direction)
         let targetLeave = profile.targetLeave(for: direction).date(on: now, calendar: calendar)
 
-        async let snapshot = transit.departures(
+        async let car = carOption(
+            from: profile.origin(for: direction).coordinate,
+            to: profile.destination(for: direction).coordinate,
+            now: now,
+            profile: profile
+        )
+        let snapshot = try await transit.departures(
             fromStation: originID,
             toStation: destinationID,
             after: min(now, targetLeave),
             limit: 24
         )
-        async let ride = accessTime(from: origin.coordinate ?? originStation.coordinate, to: originStation, profile: profile)
-        async let car = carOption(from: origin.coordinate, to: destination.coordinate, now: now, profile: profile)
 
-        let accessTime = try await ride + TimeInterval(profile.accessOverheadMinutes * 60)
+        let accessTime = TimeInterval(profile.accessMinutes(for: direction) * 60)
         let safetyBuffer = TimeInterval(profile.stationSafetyBufferMinutes * 60)
         let prepLeadTime = TimeInterval(profile.prepLeadTimeMinutes * 60)
-        let transitSnapshot = try await snapshot
-
         let attempts: (TrainDeparture) -> AttemptTimes = {
             AttemptRules.attempts(for: $0, accessTime: accessTime, safetyBuffer: safetyBuffer, prepLeadTime: prepLeadTime)
         }
 
-        let preferred = transitSnapshot.departures
+        let preferred = snapshot.departures
             .filter { profile.preferredServices.contains($0.service) }
             .sorted { $0.departureTime < $1.departureTime }
         let candidates = preferred.filter { !$0.isCancelled }
@@ -94,7 +87,7 @@ public struct DefaultPlanner: CommutePlanning {
 
         let visibleFrom = now.addingTimeInterval(-60)
         let upcoming = preferred.filter { $0.departureTime >= visibleFrom }
-        let hidden = transitSnapshot.departures.filter {
+        let hidden = snapshot.departures.filter {
             !profile.preferredServices.contains($0.service) && $0.departureTime >= visibleFrom
         }
 
@@ -105,28 +98,17 @@ public struct DefaultPlanner: CommutePlanning {
             destinationStation: destinationStation,
             targetLeave: targetLeave,
             accessTime: accessTime,
+            egressTime: TimeInterval(profile.egressMinutes(for: direction) * 60),
             safetyBuffer: safetyBuffer,
             prepLeadTime: prepLeadTime,
             train: trainOption,
             upcoming: upcoming,
             hiddenTrainCount: hidden.count,
-            transitSource: transitSnapshot.source,
-            transitFetchedAt: transitSnapshot.fetchedAt,
+            transitSource: snapshot.source,
+            transitFetchedAt: snapshot.fetchedAt,
+            transitNotice: snapshot.notice,
             car: await car
         )
-    }
-
-    private func accessTime(from: Coordinate, to station: Station, profile: CommuteProfile) async throws -> TimeInterval {
-        do {
-            return try await access.travelTime(from: from, to: station.coordinate, mode: profile.accessMode, bikeSpeedKph: profile.bikeSpeedKph)
-        } catch {
-            return try await StraightLineAccessProvider().travelTime(
-                from: from,
-                to: station.coordinate,
-                mode: profile.accessMode,
-                bikeSpeedKph: profile.bikeSpeedKph
-            )
-        }
     }
 
     private func carOption(from: Coordinate?, to: Coordinate?, now: Date, profile: CommuteProfile) async -> CarOption? {

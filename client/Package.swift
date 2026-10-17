@@ -32,7 +32,8 @@ let package = Package(
         .testTarget(
             name: "CommuteCoreTests",
             dependencies: ["CommuteCore"],
-            path: "Tests/CommuteCoreTests"
+            path: "Tests/CommuteCoreTests",
+            resources: [.copy("Fixtures")]
         )
     ]
 )

@@ -11,10 +11,17 @@ struct PlanPanel: View {
                 header
 
                 if let plan = viewModel.plan {
+                    if let notice = plan.transitNotice {
+                        Card {
+                            Label(notice, systemImage: "exclamationmark.triangle.fill")
+                                .font(.subheadline)
+                                .foregroundStyle(.orange)
+                        }
+                    }
                     SwiftUI.TimelineView(.periodic(from: .now, by: 15)) { _ in
                         let now = viewModel.currentDate()
                         VStack(spacing: 14) {
-                            HeroCard(plan: plan, profile: viewModel.profile, now: now)
+                            HeroCard(plan: plan, profile: viewModel.profile, now: now, departure: departureControl)
                             UpcomingTrainsCard(plan: plan, now: now)
                             CarCard(plan: plan)
                             footer(plan: plan)
@@ -27,7 +34,7 @@ struct PlanPanel: View {
                     }
                 } else {
                     Card {
-                        ProgressView("Finding trains…")
+                        ProgressView(viewModel.timetableInfo == nil ? "Downloading the Caltrain timetable…" : "Finding trains…")
                             .frame(maxWidth: .infinity)
                     }
                 }
@@ -79,6 +86,7 @@ struct PlanPanel: View {
                     .background(Palette.card, in: Circle())
             }
             .buttonStyle(.plain)
+            .disabled(!viewModel.isLoaded)
             .accessibilityLabel("Settings")
         }
     }
@@ -90,10 +98,23 @@ struct PlanPanel: View {
         return "\(from) → \(to)"
     }
 
+    /// "I'm on my way" for the commute on screen, when the app sends its own alerts.
+    private var departureControl: DepartureControl? {
+        guard viewModel.alertsOnDevice, viewModel.profile.leaveAlertsEnabled else { return nil }
+        return DepartureControl(hasDeparted: viewModel.hasDepartedCurrentCommute) {
+            Task { await viewModel.markDeparted() }
+        }
+    }
+
     private func footer(plan: CommutePlan) -> some View {
         VStack(spacing: 4) {
-            if plan.transitSource == .sample {
-                Label("Sample schedule. Live Caltrain data will come from the server.", systemImage: "info.circle")
+            switch plan.transitSource {
+            case .sample:
+                Label("Sample schedule for previews.", systemImage: "info.circle")
+            case .timetable:
+                Label("Caltrain timetable. Scheduled times, no live delays.", systemImage: "calendar")
+            case .live:
+                Label("Live from your server.", systemImage: "dot.radiowaves.left.and.right")
             }
             Text("Updated \(Format.time(plan.generatedAt))")
         }
@@ -106,10 +127,16 @@ struct PlanPanel: View {
 
 // MARK: - Hero
 
+struct DepartureControl {
+    let hasDeparted: Bool
+    let markDeparted: () -> Void
+}
+
 private struct HeroCard: View {
     let plan: CommutePlan
     let profile: CommuteProfile
     let now: Date
+    let departure: DepartureControl?
 
     var body: some View {
         Card {
@@ -149,7 +176,7 @@ private struct HeroCard: View {
                 Text("Train \(train.trainNumber)")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                DelayLabel(train: train)
+                DelayLabel(train: train, isLive: plan.transitSource == .live)
                     .font(.subheadline.weight(.semibold))
             }
 
@@ -166,15 +193,39 @@ private struct HeroCard: View {
 
             HStack(spacing: 14) {
                 Label("\(Format.minutes(plan.accessTime)) to platform", systemImage: profile.accessMode.symbol)
-                if let fallback = option.fallback {
-                    Label("Then \(fallback.trainNumber) at \(Format.time(fallback.departureTime))", systemImage: "arrow.uturn.right")
-                }
+                Label("At \(destinationName) \(Format.time(plan.doorArrival(for: train)))", systemImage: "flag.checkered")
             }
             .font(.footnote)
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
+
+            if let fallback = option.fallback {
+                Label("Missed it? \(fallback.service.displayName) \(fallback.trainNumber) at \(Format.time(fallback.departureTime))", systemImage: "arrow.uturn.right")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            if let departure {
+                if departure.hasDeparted {
+                    Label("On your way. Alerts for this trip are off.", systemImage: "checkmark.circle.fill")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.green)
+                } else {
+                    Button(action: departure.markDeparted) {
+                        Label("I’m on my way", systemImage: "figure.walk.departure")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(state.color)
+                }
+            }
         }
+    }
+
+    private var destinationName: String {
+        plan.direction == .homeToWork ? "work" : "home"
     }
 
     private func headline(_ option: TrainOption, state: CommuteState) -> String {
@@ -324,8 +375,11 @@ private struct TrainRow: View {
             Spacer(minLength: 4)
 
             VStack(alignment: .trailing, spacing: 2) {
-                DelayLabel(train: train)
-                    .font(.caption.weight(.semibold))
+                // Rows only flag changes; "Scheduled" on every row would be noise.
+                if plan.transitSource == .live || train.isCancelled {
+                    DelayLabel(train: train, isLive: plan.transitSource == .live)
+                        .font(.caption.weight(.semibold))
+                }
                 Text(status(catchable: catchable))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -394,7 +448,7 @@ private struct CarCard: View {
             Text("Arrive \(Format.time(plan.generatedAt.addingTimeInterval(car.eta)))")
                 .font(.subheadline.weight(.semibold))
                 .monospacedDigit()
-            Text("train reaches station \(Format.time(train.arrivalTime))")
+            Text("train gets you there \(Format.time(plan.doorArrival(for: train)))")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

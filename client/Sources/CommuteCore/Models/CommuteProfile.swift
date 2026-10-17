@@ -6,12 +6,14 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
     public var homeStationID: String
     public var workStationID: String
 
-    /// How the rider gets to and from stations.
+    /// How the rider gets to and from stations; drives icons and the Maps estimate.
     public var accessMode: AccessMode
-    /// Riding speed used to turn route distance into bike time.
+    /// Riding speed used when estimating bike time from a route distance.
     public var bikeSpeedKph: Double
-    /// Fixed time on top of the ride or walk: locking up, reaching the platform.
-    public var accessOverheadMinutes: Int
+    /// Door-to-platform minutes between home and its station, either direction.
+    public var homeStationMinutes: Int
+    /// Door-to-platform minutes between work and its station, either direction.
+    public var workStationMinutes: Int
     /// Slack between the planned arrival at the station and the departure.
     public var stationSafetyBufferMinutes: Int
     /// How long before "leave now" the "get ready" heads-up comes.
@@ -21,12 +23,20 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
     public var morningTargetLeave: TimeOfDay
     /// When the rider wants to leave work in the evening.
     public var eveningTargetLeave: TimeOfDay
+    /// Days with a commute, as `Calendar` weekday numbers (1 = Sunday).
+    public var commuteDays: Set<Int>
 
     /// Train services the rider is willing to take.
     public var preferredServices: Set<TrainService>
 
     /// Car traffic counts as good while it is at most this much slower than free flow.
     public var carGoodDeltaMinutes: Int
+
+    /// Whether the app schedules its own get ready / leave now notifications.
+    public var leaveAlertsEnabled: Bool
+
+    /// Where train data comes from.
+    public var dataSource: DataSourceSettings
 
     public init(
         home: Place,
@@ -35,13 +45,17 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         workStationID: String,
         accessMode: AccessMode = .bike,
         bikeSpeedKph: Double = 16,
-        accessOverheadMinutes: Int = 2,
+        homeStationMinutes: Int = 10,
+        workStationMinutes: Int = 10,
         stationSafetyBufferMinutes: Int = 3,
         prepLeadTimeMinutes: Int = 20,
         morningTargetLeave: TimeOfDay = TimeOfDay(hour: 8, minute: 0),
         eveningTargetLeave: TimeOfDay = TimeOfDay(hour: 17, minute: 30),
+        commuteDays: Set<Int> = [2, 3, 4, 5, 6],
         preferredServices: Set<TrainService> = Set(TrainService.allCases),
-        carGoodDeltaMinutes: Int = 10
+        carGoodDeltaMinutes: Int = 10,
+        leaveAlertsEnabled: Bool = false,
+        dataSource: DataSourceSettings = DataSourceSettings()
     ) {
         self.home = home
         self.work = work
@@ -49,13 +63,17 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         self.workStationID = workStationID
         self.accessMode = accessMode
         self.bikeSpeedKph = bikeSpeedKph
-        self.accessOverheadMinutes = accessOverheadMinutes
+        self.homeStationMinutes = homeStationMinutes
+        self.workStationMinutes = workStationMinutes
         self.stationSafetyBufferMinutes = stationSafetyBufferMinutes
         self.prepLeadTimeMinutes = prepLeadTimeMinutes
         self.morningTargetLeave = morningTargetLeave
         self.eveningTargetLeave = eveningTargetLeave
+        self.commuteDays = commuteDays
         self.preferredServices = preferredServices
         self.carGoodDeltaMinutes = carGoodDeltaMinutes
+        self.leaveAlertsEnabled = leaveAlertsEnabled
+        self.dataSource = dataSource
     }
 
     public static let `default` = CommuteProfile(
@@ -85,11 +103,21 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         direction == .homeToWork ? morningTargetLeave : eveningTargetLeave
     }
 
+    /// Door to origin platform.
+    public func accessMinutes(for direction: Direction) -> Int {
+        direction == .homeToWork ? homeStationMinutes : workStationMinutes
+    }
+
+    /// Destination platform to door.
+    public func egressMinutes(for direction: Direction) -> Int {
+        direction == .homeToWork ? workStationMinutes : homeStationMinutes
+    }
+
     // Decoding tolerates missing keys so saved profiles survive new fields.
     private enum CodingKeys: String, CodingKey {
-        case home, work, homeStationID, workStationID, accessMode, bikeSpeedKph, accessOverheadMinutes
-        case stationSafetyBufferMinutes, prepLeadTimeMinutes, morningTargetLeave, eveningTargetLeave
-        case preferredServices, carGoodDeltaMinutes
+        case home, work, homeStationID, workStationID, accessMode, bikeSpeedKph, homeStationMinutes, workStationMinutes
+        case stationSafetyBufferMinutes, prepLeadTimeMinutes, morningTargetLeave, eveningTargetLeave, commuteDays
+        case preferredServices, carGoodDeltaMinutes, leaveAlertsEnabled, dataSource
     }
 
     public init(from decoder: Decoder) throws {
@@ -101,12 +129,16 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         workStationID = try c.decodeIfPresent(String.self, forKey: .workStationID) ?? d.workStationID
         accessMode = try c.decodeIfPresent(AccessMode.self, forKey: .accessMode) ?? d.accessMode
         bikeSpeedKph = try c.decodeIfPresent(Double.self, forKey: .bikeSpeedKph) ?? d.bikeSpeedKph
-        accessOverheadMinutes = try c.decodeIfPresent(Int.self, forKey: .accessOverheadMinutes) ?? d.accessOverheadMinutes
+        homeStationMinutes = try c.decodeIfPresent(Int.self, forKey: .homeStationMinutes) ?? d.homeStationMinutes
+        workStationMinutes = try c.decodeIfPresent(Int.self, forKey: .workStationMinutes) ?? d.workStationMinutes
         stationSafetyBufferMinutes = try c.decodeIfPresent(Int.self, forKey: .stationSafetyBufferMinutes) ?? d.stationSafetyBufferMinutes
         prepLeadTimeMinutes = try c.decodeIfPresent(Int.self, forKey: .prepLeadTimeMinutes) ?? d.prepLeadTimeMinutes
         morningTargetLeave = try c.decodeIfPresent(TimeOfDay.self, forKey: .morningTargetLeave) ?? d.morningTargetLeave
         eveningTargetLeave = try c.decodeIfPresent(TimeOfDay.self, forKey: .eveningTargetLeave) ?? d.eveningTargetLeave
+        commuteDays = try c.decodeIfPresent(Set<Int>.self, forKey: .commuteDays) ?? d.commuteDays
         preferredServices = try c.decodeIfPresent(Set<TrainService>.self, forKey: .preferredServices) ?? d.preferredServices
         carGoodDeltaMinutes = try c.decodeIfPresent(Int.self, forKey: .carGoodDeltaMinutes) ?? d.carGoodDeltaMinutes
+        leaveAlertsEnabled = try c.decodeIfPresent(Bool.self, forKey: .leaveAlertsEnabled) ?? d.leaveAlertsEnabled
+        dataSource = try c.decodeIfPresent(DataSourceSettings.self, forKey: .dataSource) ?? d.dataSource
     }
 }

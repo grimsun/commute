@@ -8,11 +8,11 @@ A Caltrain commute planner for people who bike (or walk) to the station.
 It picks your train, counts down to when you need to be out the door, and
 rolls you onto the next train when you miss one.
 
-<img src="docs/screenshots/on-track.png" width="260" alt="On track: leave in 25 minutes for Limited 406">
+<img src="docs/screenshots/on-track.png" width="260" alt="On track: leave in 22 minutes for Express 510">
 &nbsp;
-<img src="docs/screenshots/leave-now.png" width="260" alt="Leave now: too late after 8:13">
+<img src="docs/screenshots/leave-now.png" width="260" alt="Leave now: too late after 8:10">
 &nbsp;
-<img src="docs/screenshots/next-train.png" width="260" alt="Missed the target train, rolled to Local 116 with a 5 minute delay">
+<img src="docs/screenshots/next-train.png" width="260" alt="Missed the target train, rolled to Local 114">
 
 </div>
 
@@ -35,13 +35,15 @@ Commute works backwards from the train, using how long *you* take to get to the 
   It follows the first train you'd catch leaving then.
 - **Get ready → Leave now → Too late.** The countdown moves through each stage as the minutes tick by.
 - **Missed it? No drama.** Past "too late", it moves to the next train you can still catch and tells you when to leave for that one.
-- **Delays and cancellations.** Predicted times replace the timetable; a cancelled target train hands over to the next one.
+- **Alerts.** "Get ready" and "Leave now" notifications, even with the app closed. Tap *I'm on my way* and the rest of the trip stays quiet.
+- **Delays and cancellations** *(with the server).* Predicted times replace the timetable; a cancelled target train hands over to the next one.
 
 ## Features
 
 |  |  |
 |---|---|
-| 🚲 **Bike or walk** | Door-to-platform time from Apple Maps. Bike time uses the real route distance at *your* riding speed. |
+| 🚲 **Bike or walk** | Your door-to-platform minutes for each end, with an Apple Maps estimate to start from. Shows when you'll actually reach the door. |
+| 📅 **Real timetable** | Downloads Caltrain's published schedule on first launch and keeps it on the phone. Refresh any time in Settings. |
 | 🚄 **Train types** | Local, Limited, Express, South County. Turn off the ones you'd never take, and they disappear from planning. |
 | 🗺️ **Map** | Your home, work, both stations and the rail line between them, with a draggable sheet in the style of Apple Maps. |
 | 🔁 **Both directions** | Flips to "To home" in the afternoon on its own; tap the header to switch by hand. |
@@ -72,8 +74,11 @@ flowchart LR
     maps --> app
 ```
 
-Today the app runs on its own with a generated sample timetable. The server will add live
-Caltrain data and push notifications, and it will use the same planning rules as the app.
+The app has two modes, switched in Settings:
+
+- **Standalone** (default): Caltrain's timetable on the phone, alerts scheduled by the app. Nothing to host.
+- **Server**: point the app at your Commute server for live delays and push notifications that follow them.
+  If the server can't be reached, the app falls back to the timetable.
 Everything runs on free APIs; no billing account anywhere.
 
 ## Repository
@@ -97,4 +102,4 @@ and the debug launch arguments used to take the screenshots above.
 
 ---
 
-<sub>Not affiliated with Caltrain. Schedules shown in the app are sample data until the server is live.</sub>
+<sub>Not affiliated with Caltrain. Timetable data from Caltrain's public GTFS feed.</sub>

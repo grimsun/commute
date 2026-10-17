@@ -108,6 +108,8 @@ struct ServiceBadge: View {
 
 struct DelayLabel: View {
     let train: TrainDeparture
+    /// Without realtime data a train is only "scheduled", never confirmed on time.
+    let isLive: Bool
 
     var body: some View {
         if train.isCancelled {
@@ -116,9 +118,12 @@ struct DelayLabel: View {
         } else if train.delayMinutes > 0 {
             Text("+\(train.delayMinutes) min")
                 .foregroundStyle(train.delayMinutes >= 5 ? .red : .orange)
-        } else {
+        } else if isLive {
             Text("On time")
                 .foregroundStyle(.green)
+        } else {
+            Text("Scheduled")
+                .foregroundStyle(.secondary)
         }
     }
 }

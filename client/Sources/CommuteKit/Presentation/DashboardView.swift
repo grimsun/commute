@@ -7,14 +7,16 @@ public struct DashboardView: View {
     }
 
     @State private var viewModel: CommuteViewModel
-    @State private var isSettingsPresented: Bool
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var isSettingsPresented = false
+    private let showsSettingsOnLaunch: Bool
     @State private var detent: PresentationDetent
 
     private static let peekDetent = PresentationDetent.height(220)
 
     public init(viewModel: CommuteViewModel, panelSize: PanelSize = .medium, showsSettings: Bool = false) {
         _viewModel = State(initialValue: viewModel)
-        _isSettingsPresented = State(initialValue: showsSettings)
+        showsSettingsOnLaunch = showsSettings
         let detent: PresentationDetent = switch panelSize {
         case .peek: Self.peekDetent
         case .medium: .medium
@@ -46,6 +48,16 @@ public struct DashboardView: View {
         .task {
             await viewModel.run()
         }
+        .onChange(of: viewModel.isLoaded) { _, loaded in
+            if loaded, showsSettingsOnLaunch {
+                isSettingsPresented = true
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task { await viewModel.becameActive() }
+            }
+        }
     }
 
     private func mapInset(screenHeight: CGFloat) -> CGFloat {
@@ -58,15 +70,21 @@ public struct DashboardView: View {
 }
 
 #if DEBUG
+/// Sample trains and no alerts, so previews work offline.
+private struct PreviewServiceFactory: CommuteServiceFactory {
+    func services(for settings: DataSourceSettings) -> CommuteServices {
+        CommuteServices(transit: SampleTransitProvider(), alerts: NoopLeaveAlertScheduler())
+    }
+}
+
 @MainActor
 private func previewViewModel() -> CommuteViewModel {
     CommuteViewModel(
-        planner: DefaultPlanner(
-            transit: SampleTransitProvider(),
-            access: FixedAccessProvider(seconds: 7 * 60),
-            traffic: FixedTrafficProvider(eta: 52 * 60, freeFlowETA: 38 * 60)
-        ),
-        store: InMemoryProfileStore()
+        profileStore: InMemoryProfileStore(),
+        timetable: TimetableStore(source: GTFSTimetableSource(), cacheURL: nil),
+        factory: PreviewServiceFactory(),
+        traffic: FixedTrafficProvider(eta: 52 * 60, freeFlowETA: 38 * 60),
+        access: FixedAccessProvider(seconds: 7 * 60)
     )
 }
 

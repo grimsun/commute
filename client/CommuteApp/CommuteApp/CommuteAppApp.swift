@@ -3,16 +3,21 @@ import SwiftUI
 
 @main
 struct CommuteAppApp: App {
-    @State private var viewModel = CommuteViewModel(
-        planner: DefaultPlanner(
-            // Swap for a server-backed provider once the server exists.
-            transit: SampleTransitProvider(),
+    @State private var viewModel: CommuteViewModel
+
+    init() {
+        LeaveAlertPresenter.shared.install()
+        let timetable = TimetableStore(source: GTFSTimetableSource())
+        _viewModel = State(initialValue: CommuteViewModel(
+            profileStore: UserDefaultsProfileStore(),
+            timetable: timetable,
+            // Standalone vs server implementations are chosen here, per the saved data source.
+            factory: StandardServiceFactory(timetable: timetable, deviceAlerts: LocalLeaveAlertScheduler()),
+            traffic: MapKitTrafficProvider(),
             access: MapKitStationAccessProvider(),
-            traffic: MapKitTrafficProvider()
-        ),
-        store: UserDefaultsProfileStore(),
-        now: DebugLaunch.clock
-    )
+            now: DebugLaunch.clock
+        ))
+    }
 
     var body: some Scene {
         WindowGroup {
