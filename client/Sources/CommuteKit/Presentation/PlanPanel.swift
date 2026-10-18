@@ -29,6 +29,8 @@ struct PlanPanel: View {
         let departedTrain = viewModel.departedTrain
         let trainPath = viewModel.trainPath
         let elsewhereTrain = viewModel.elsewhereTrain
+        let scheduleLabel = viewModel.scheduleDay?.shortLabel
+        let scheduleDetail = viewModel.scheduleDay?.label
         let errorMessage = viewModel.errorMessage
         let isDownloading = viewModel.timetableInfo == nil
         let isTemporaryRoute = viewModel.temporaryRoute != nil
@@ -44,7 +46,7 @@ struct PlanPanel: View {
                         VStack(spacing: 12) {
                             header
                             if let plan {
-                                HeroCard(plan: plan, profile: routeProfile, now: now, tripInProgress: tripInProgress, isTemporaryRoute: isTemporaryRoute, elsewhereTrain: tripInProgress == nil ? elsewhereTrain : nil, path: trainPath, showsStops: isExpanded) { train in
+                                HeroCard(plan: plan, profile: routeProfile, now: now, tripInProgress: tripInProgress, isTemporaryRoute: isTemporaryRoute, elsewhereTrain: tripInProgress == nil ? elsewhereTrain : nil, path: trainPath, showsStops: isExpanded, scheduleLabel: scheduleLabel) { train in
                                     Task { await viewModel.pick(train) }
                                 }
                             } else {
@@ -71,6 +73,7 @@ struct PlanPanel: View {
                                 highlightedID: tripInProgress?.id ?? elsewhereTrain?.id ?? plan.train?.train.id,
                                 isTripInProgress: tripInProgress != nil,
                                 isElsewhere: tripInProgress == nil && elsewhereTrain != nil,
+                                scheduleLabel: scheduleDetail,
                                 onPick: { train in
                                     Task { await viewModel.pick(train) }
                                     onPickTrain()
@@ -220,7 +223,7 @@ struct PlanPanel: View {
             case .timetable:
                 Label("Caltrain timetable. Scheduled times, no live delays.", systemImage: "calendar")
             case .live:
-                Label("Live from your server.", systemImage: "dot.radiowaves.left.and.right")
+                Label(viewModel.profile.dataSource.mode == .server ? "Live from your server." : "Live delays from Caltrain, updated \(Format.relative(plan.transitFetchedAt, from: viewModel.currentDate())).", systemImage: "dot.radiowaves.left.and.right")
             }
             Text("Updated \(Format.time(plan.generatedAt))")
         }
@@ -356,6 +359,8 @@ private struct HeroCard: View {
     var path: TrainPath? = nil
     /// Expanded sheet: the card adds the train's stops.
     var showsStops = false
+    /// "Weekday schedule" etc.; shown instead of "Scheduled" when there is no live data.
+    var scheduleLabel: String? = nil
     var onPick: (TrainDeparture) -> Void = { _ in }
 
     var body: some View {
@@ -395,8 +400,17 @@ private struct HeroCard: View {
                         .accessibilityLabel("Pinned")
                 }
                 Spacer()
-                DelayLabel(train: train, isLive: plan.transitSource == .live)
-                    .font(.subheadline.weight(.semibold))
+                // Untracked trains have only timetable times, so the schedule label fits them.
+                if (plan.transitSource != .live || train.isTracked != true), !train.isCancelled, let scheduleLabel {
+                    Text(scheduleLabel)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                } else {
+                    DelayLabel(train: train, isLive: plan.transitSource == .live && train.isTracked == true)
+                        .font(.subheadline.weight(.semibold))
+                }
             }
 
             HStack(spacing: 10) {
@@ -658,6 +672,8 @@ private struct UpcomingTrainsCard: View {
     let isTripInProgress: Bool
     /// Away from home or work: rows count down to departure, with no "too late" judgement.
     let isElsewhere: Bool
+    /// "Weekday schedule" etc., next to the list title.
+    let scheduleLabel: String?
     let onPick: (TrainDeparture) -> Void
     let onClearPick: () -> Void
     /// Stops and times for a train, loaded when its row is opened.
@@ -676,9 +692,18 @@ private struct UpcomingTrainsCard: View {
         let countdownIDs = Set(plan.upcoming.filter { RowStatus(train: $0, plan: plan, now: now, isElsewhere: isElsewhere) == .catchable }.prefix(2).map(\.id))
         Card {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Upcoming trains")
-                    .font(.headline)
-                    .padding(.bottom, 6)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Upcoming trains")
+                        .font(.headline)
+                    if let scheduleLabel {
+                        Text(scheduleLabel)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                }
+                .padding(.bottom, 6)
 
                 if rows.isEmpty {
                     Text("No more trains today.")
@@ -916,7 +941,7 @@ private struct TrainRow: View {
             Spacer(minLength: 4)
 
             VStack(alignment: .trailing, spacing: 2) {
-                if plan.transitSource == .live && status != .cancelled {
+                if plan.transitSource == .live && train.isTracked == true && status != .cancelled {
                     DelayLabel(train: train, isLive: true)
                         .font(.caption.weight(.semibold))
                 }

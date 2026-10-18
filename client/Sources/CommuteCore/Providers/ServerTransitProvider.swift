@@ -33,7 +33,14 @@ public struct ServerTransitProvider: TransitProvider {
             URLQueryItem(name: "limit", value: String(limit))
         ])
         return TransitSnapshot(
-            departures: response.departures.sorted { $0.departureTime < $1.departureTime },
+            // Everything the server sends is live unless it says otherwise.
+            departures: response.departures
+                .map { departure in
+                    var departure = departure
+                    departure.isTracked = departure.isTracked ?? true
+                    return departure
+                }
+                .sorted { $0.departureTime < $1.departureTime },
             source: .live,
             fetchedAt: response.fetchedAt
         )

@@ -35,6 +35,7 @@ public enum GTFSParser {
             let parent = stops.value(row, "parent_station")
             parentStation[id] = parent.isEmpty ? id : parent
         }
+        let platformStations = parentStation.filter { $0.key != $0.value }
 
         let routes = try table("routes.txt")
         var routeService: [String: TrainService] = [:]
@@ -95,17 +96,24 @@ public enum GTFSParser {
             let days = ["sunday": 1, "monday": 2, "tuesday": 3, "wednesday": 4, "thursday": 5, "friday": 6, "saturday": 7]
             for row in calendar.rows {
                 let weekdays = Set(days.compactMap { name, weekday in calendar.value(row, name) == "1" ? weekday : nil })
+                let name = calendar.value(row, "service_name")
                 services[calendar.value(row, "service_id")] = Timetable.ServiceCalendar(
                     weekdays: weekdays,
                     startDate: Int(calendar.value(row, "start_date")) ?? 0,
-                    endDate: Int(calendar.value(row, "end_date")) ?? 0
+                    endDate: Int(calendar.value(row, "end_date")) ?? 0,
+                    name: name.isEmpty ? nil : name
                 )
             }
         }
+        var holidays: [Int: String] = [:]
         if files["calendar_dates.txt"] != nil {
             let exceptions = try table("calendar_dates.txt")
             for row in exceptions.rows {
                 guard let date = Int(exceptions.value(row, "date")) else { continue }
+                let holiday = exceptions.value(row, "holiday_name")
+                if !holiday.isEmpty {
+                    holidays[date] = holiday
+                }
                 let id = exceptions.value(row, "service_id")
                 var service = services[id] ?? Timetable.ServiceCalendar(weekdays: [], startDate: 0, endDate: 0)
                 if exceptions.value(row, "exception_type") == "2" {
@@ -138,7 +146,15 @@ public enum GTFSParser {
             shapes = points.mapValues { $0.sorted { $0.sequence < $1.sequence }.map(\.coordinate) }
         }
 
-        return Timetable(downloadedAt: downloadedAt, feedVersion: feedVersion, services: services, trips: trips, shapes: shapes)
+        return Timetable(
+            downloadedAt: downloadedAt,
+            feedVersion: feedVersion,
+            services: services,
+            trips: trips,
+            shapes: shapes,
+            holidays: holidays,
+            platformStations: platformStations
+        )
     }
 
     /// "HH:MM:SS" to seconds; hours may exceed 23 for trips past midnight.

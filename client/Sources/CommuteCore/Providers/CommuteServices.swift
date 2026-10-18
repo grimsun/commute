@@ -5,10 +5,13 @@ import Foundation
 public struct CommuteServices: Sendable {
     public var transit: TransitProvider
     public var alerts: LeaveAlertScheduler
+    /// Live predictions the app refreshes itself (standalone); `nil` when the server provides them.
+    public var liveFeed: CaltrainLiveFeed?
 
-    public init(transit: TransitProvider, alerts: LeaveAlertScheduler) {
+    public init(transit: TransitProvider, alerts: LeaveAlertScheduler, liveFeed: CaltrainLiveFeed? = nil) {
         self.transit = transit
         self.alerts = alerts
+        self.liveFeed = liveFeed
     }
 }
 
@@ -16,16 +19,18 @@ public protocol CommuteServiceFactory: Sendable {
     func services(for settings: DataSourceSettings) -> CommuteServices
 }
 
-/// Standalone: timetable + on-device alerts.
+/// Standalone: timetable with live delays from Caltrain's public feed + on-device alerts.
 /// Server: server trains (timetable when unreachable) + server pushes.
 public struct StandardServiceFactory: CommuteServiceFactory {
     private let timetable: TimetableStore
     private let deviceAlerts: LeaveAlertScheduler
+    private let liveFeed: CaltrainLiveFeed
     private let session: URLSession
 
-    public init(timetable: TimetableStore, deviceAlerts: LeaveAlertScheduler, session: URLSession = .shared) {
+    public init(timetable: TimetableStore, deviceAlerts: LeaveAlertScheduler, liveFeed: CaltrainLiveFeed = CaltrainLiveFeed(), session: URLSession = .shared) {
         self.timetable = timetable
         self.deviceAlerts = deviceAlerts
+        self.liveFeed = liveFeed
         self.session = session
     }
 
@@ -33,7 +38,11 @@ public struct StandardServiceFactory: CommuteServiceFactory {
         let scheduled = TimetableTransitProvider(store: timetable)
         switch settings.mode {
         case .standalone:
-            return CommuteServices(transit: scheduled, alerts: deviceAlerts)
+            return CommuteServices(
+                transit: LiveTimetableTransitProvider(store: timetable, feed: liveFeed),
+                alerts: deviceAlerts,
+                liveFeed: liveFeed
+            )
         case .server:
             return CommuteServices(
                 transit: FallbackTransitProvider(

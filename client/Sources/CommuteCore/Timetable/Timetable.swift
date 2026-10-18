@@ -3,7 +3,7 @@ import Foundation
 /// The parts of a Caltrain GTFS feed needed to answer "which trains go from A to B after T".
 public struct Timetable: Codable, Equatable, Sendable {
     /// Bump when the cached format changes; older caches are discarded.
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
 
     public var schemaVersion: Int
     public var downloadedAt: Date
@@ -12,14 +12,28 @@ public struct Timetable: Codable, Equatable, Sendable {
     public var trips: [Trip]
     /// Track geometry by GTFS shape id, in travel order.
     public var shapes: [String: [Coordinate]]
+    /// Holiday or special-day names by yyyymmdd ("Thanksgiving", "6/16 World Cup").
+    public var holidays: [Int: String]
+    /// Platform stop ids ("70011") to their station ("san_francisco"), for realtime feeds.
+    public var platformStations: [String: String]
 
-    public init(downloadedAt: Date, feedVersion: String?, services: [String: ServiceCalendar], trips: [Trip], shapes: [String: [Coordinate]] = [:]) {
+    public init(
+        downloadedAt: Date,
+        feedVersion: String?,
+        services: [String: ServiceCalendar],
+        trips: [Trip],
+        shapes: [String: [Coordinate]] = [:],
+        holidays: [Int: String] = [:],
+        platformStations: [String: String] = [:]
+    ) {
         self.schemaVersion = Self.currentSchemaVersion
         self.downloadedAt = downloadedAt
         self.feedVersion = feedVersion
         self.services = services
         self.trips = trips
         self.shapes = shapes
+        self.holidays = holidays
+        self.platformStations = platformStations
     }
 
     public struct ServiceCalendar: Codable, Equatable, Sendable {
@@ -30,13 +44,16 @@ public struct Timetable: Codable, Equatable, Sendable {
         public var endDate: Int
         public var addedDates: Set<Int>
         public var removedDates: Set<Int>
+        /// The feed's service name, e.g. "Year Round starting 1/31/2026 (Weekday)".
+        public var name: String?
 
-        public init(weekdays: Set<Int>, startDate: Int, endDate: Int, addedDates: Set<Int> = [], removedDates: Set<Int> = []) {
+        public init(weekdays: Set<Int>, startDate: Int, endDate: Int, addedDates: Set<Int> = [], removedDates: Set<Int> = [], name: String? = nil) {
             self.weekdays = weekdays
             self.startDate = startDate
             self.endDate = endDate
             self.addedDates = addedDates
             self.removedDates = removedDates
+            self.name = name
         }
 
         public func isActive(on dateKey: Int, weekday: Int) -> Bool {
@@ -133,6 +150,57 @@ public struct Timetable: Codable, Equatable, Sendable {
         }
 
         return Array(result.sorted { $0.scheduledDeparture < $1.scheduledDeparture }.prefix(limit))
+    }
+}
+
+/// Which timetable runs on a day, for the "Weekday schedule" label.
+public struct ScheduleDay: Equatable, Sendable {
+    public enum Kind: String, Sendable {
+        case weekday, weekend
+    }
+
+    public var kind: Kind
+    /// Set on holidays and special-service days.
+    public var holidayName: String?
+
+    public init(kind: Kind, holidayName: String?) {
+        self.kind = kind
+        self.holidayName = holidayName
+    }
+
+    /// Fits a tight spot: "Weekday schedule", "Weekend schedule", or "Holiday schedule".
+    public var shortLabel: String {
+        holidayName == nil ? "\(kind.rawValue.capitalized) schedule" : "Holiday schedule"
+    }
+
+    /// "Weekday schedule", "Weekend schedule", or "Thanksgiving · weekend schedule".
+    public var label: String {
+        guard let holidayName else { return "\(kind.rawValue.capitalized) schedule" }
+        return "\(holidayName) · \(kind.rawValue) schedule"
+    }
+}
+
+extension Timetable {
+    /// The schedule running on the service day of `date`; `nil` when nothing runs.
+    public func scheduleDay(for date: Date, calendar: Calendar = .caltrain) -> ScheduleDay? {
+        let key = DateKey.key(for: date, calendar: calendar)
+        let weekday = calendar.component(.weekday, from: date)
+        let active = services.values.filter { $0.isActive(on: key, weekday: weekday) }
+        guard !active.isEmpty else { return nil }
+
+        // Prefer the feed's own naming; else infer from which days the services run.
+        let names = active.compactMap { $0.name?.lowercased() }
+        let kind: ScheduleDay.Kind
+        if names.contains(where: { $0.contains("weekend") }) {
+            kind = .weekend
+        } else if names.contains(where: { $0.contains("weekday") }) {
+            kind = .weekday
+        } else {
+            let weekend: Set<Int> = [1, 7]
+            let regular = active.flatMap(\.weekdays)
+            kind = !regular.isEmpty && Set(regular).isSubset(of: weekend) || (regular.isEmpty && weekend.contains(weekday)) ? .weekend : .weekday
+        }
+        return ScheduleDay(kind: kind, holidayName: holidays[key])
     }
 }
 

@@ -55,6 +55,9 @@ public struct TrainDeparture: Codable, Equatable, Identifiable, Sendable {
     public var delaySeconds: Int
     public var isCancelled: Bool
     public var platform: String?
+    /// The live feed reported on this train; otherwise its times are just the timetable's.
+    /// Optional so server JSON without the field still decodes.
+    public var isTracked: Bool?
 
     public var id: String { tripID }
 
@@ -72,7 +75,8 @@ public struct TrainDeparture: Codable, Equatable, Identifiable, Sendable {
         scheduledArrival: Date,
         delaySeconds: Int = 0,
         isCancelled: Bool = false,
-        platform: String? = nil
+        platform: String? = nil,
+        isTracked: Bool? = nil
     ) {
         self.tripID = tripID
         self.trainNumber = trainNumber
@@ -82,6 +86,7 @@ public struct TrainDeparture: Codable, Equatable, Identifiable, Sendable {
         self.delaySeconds = delaySeconds
         self.isCancelled = isCancelled
         self.platform = platform
+        self.isTracked = isTracked
     }
 }
 

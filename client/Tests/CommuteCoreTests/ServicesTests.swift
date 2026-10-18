@@ -88,7 +88,8 @@ final class ServiceFactoryTests: XCTestCase {
         )
 
         let standalone = factory.services(for: DataSourceSettings(mode: .standalone))
-        XCTAssertTrue(standalone.transit is TimetableTransitProvider)
+        XCTAssertTrue(standalone.transit is LiveTimetableTransitProvider)
+        XCTAssertNotNil(standalone.liveFeed)
         XCTAssertTrue(standalone.alerts.schedulesOnDevice)
 
         let server = factory.services(for: DataSourceSettings(mode: .server, serverURL: "http://commute.local"))

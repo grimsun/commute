@@ -38,7 +38,7 @@ Commute works backwards from the train, using how long *you* take to get to the 
 - **Alerts.** "Get ready" and "Leave now" notifications, even with the app closed. With location access, the app notices you've left and the rest of the trip stays quiet; on the way it shows when your train leaves, on board when it arrives, and a heads-up comes just before your stop.
 - **Lock Screen countdown.** A Live Activity counts down to leaving, to the train, then to arrival, in the Dynamic Island too.
 - **Your call.** Long-press any train in the list to pin it instead; tap it to see its stops. When an express would get you there sooner without leaving earlier, the card says so.
-- **Delays and cancellations** *(with the server).* Predicted times replace the timetable; a cancelled target train hands over to the next one.
+- **Delays and cancellations.** Predicted times replace the timetable; a cancelled target train hands over to the next one. The card says which schedule runs today: weekday, weekend or holiday.
 
 ## Features
 
@@ -78,7 +78,7 @@ flowchart LR
 
 The app has two modes, switched in Settings:
 
-- **Standalone** (default): Caltrain's timetable on the phone, alerts scheduled by the app. Nothing to host.
+- **Standalone** (default): Caltrain's timetable on the phone, live delays and cancellations from Caltrain's public feed (fetched only around a trip, at most every few minutes), alerts scheduled by the app. Nothing to host.
 - **Server**: point the app at your Commute server for live delays and push notifications that follow them.
   If the server can't be reached, the app falls back to the timetable.
 Everything runs on free APIs; no billing account anywhere.

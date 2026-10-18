@@ -32,6 +32,8 @@ public final class CommuteViewModel {
     public private(set) var isLoaded = false
 
     public private(set) var timetableInfo: TimetableInfo?
+    /// Which timetable runs on the day of the card's train ("Weekday schedule", holidays).
+    public private(set) var scheduleDay: ScheduleDay?
     public private(set) var isUpdatingTimetable = false
     public private(set) var timetableError: String?
 
@@ -141,7 +143,8 @@ public final class CommuteViewModel {
         await rescheduleAlerts()
     }
 
-    public func refresh() async {
+    /// `userInitiated` (the refresh button) may fetch live data sooner than the automatic cadence.
+    public func refresh(userInitiated: Bool = false) async {
         let previousPicks = picks
         let date = now()
         updateDirection(at: date)
@@ -162,22 +165,12 @@ public final class CommuteViewModel {
             }
         }
 
-        let planner = DefaultPlanner(transit: services.transit, traffic: traffic)
-        let profile = profile
-        let picks = picks
         do {
-            let newPlans: [Direction: CommutePlan]
-            if temporaryRoute != nil {
-                var routeProfile = routeProfile
-                let currentTime = TimeOfDay(date: date)
-                routeProfile.morningTargetLeave = currentTime
-                routeProfile.eveningTargetLeave = currentTime
-                let current = try await planner.plan(profile: routeProfile, direction: direction, now: date, pickedTripID: temporaryPick)
-                newPlans = [direction: current]
-            } else {
-                async let toWork = planner.plan(profile: profile, direction: .homeToWork, now: date, pickedTripID: picks[.homeToWork])
-                async let toHome = planner.plan(profile: profile, direction: .workToHome, now: date, pickedTripID: picks[.workToHome])
-                newPlans = try await [Direction.homeToWork: toWork, .workToHome: toHome]
+            var newPlans = try await computePlans(at: date)
+            // Live delays only around a trip, and only as often as the feed allows; then re-plan with them.
+            if let feed = services.liveFeed, wantsLiveData(newPlans, at: date) {
+                await feed.refreshIfDue(manual: userInitiated)
+                newPlans = try await computePlans(at: date)
             }
             guard generation == refreshGeneration else { return }
             // Animated so a train change (missed → next) slides in rather than snapping.
@@ -200,6 +193,7 @@ public final class CommuteViewModel {
             errorMessage = Self.message(for: error)
         }
         timetableInfo = await timetable.info()
+        scheduleDay = await timetable.scheduleDay(for: plan?.train?.train.departureTime ?? date)
         await loadPaths()
         await syncLiveActivity()
         if generation == refreshGeneration, previousPicks != self.picks {
@@ -243,6 +237,34 @@ public final class CommuteViewModel {
     /// Stops and times for any listed train, for the inline stop list.
     public func path(for train: TrainDeparture) async -> TrainPath? {
         await timetable.path(for: train)
+    }
+
+    private func computePlans(at date: Date) async throws -> [Direction: CommutePlan] {
+        let planner = DefaultPlanner(transit: services.transit, traffic: traffic)
+        if temporaryRoute != nil {
+            var routeProfile = routeProfile
+            let currentTime = TimeOfDay(date: date)
+            routeProfile.morningTargetLeave = currentTime
+            routeProfile.eveningTargetLeave = currentTime
+            let current = try await planner.plan(profile: routeProfile, direction: direction, now: date, pickedTripID: temporaryPick)
+            return [direction: current]
+        }
+        let profile = profile
+        let picks = picks
+        async let toWork = planner.plan(profile: profile, direction: .homeToWork, now: date, pickedTripID: picks[.homeToWork])
+        async let toHome = planner.plan(profile: profile, direction: .workToHome, now: date, pickedTripID: picks[.workToHome])
+        return try await [Direction.homeToWork: toWork, .workToHome: toHome]
+    }
+
+    /// How close a departure must be before live delays are worth a request.
+    static let liveDataLead: TimeInterval = 90 * 60
+
+    /// Live data matters only when the train on screen leaves soon or is being ridden.
+    private func wantsLiveData(_ plans: [Direction: CommutePlan], at date: Date) -> Bool {
+        guard let plan = plans[direction] else { return false }
+        let train = takenTrain(direction: direction, plan: plan) ?? plan.train?.train ?? plan.upcoming.first { $0.departureTime > date }
+        guard let train else { return false }
+        return train.departureTime.timeIntervalSince(date) <= Self.liveDataLead && date < train.arrivalTime
     }
 
     /// Seconds until the next refresh: a minute, or just after the next too-late moment.

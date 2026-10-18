@@ -144,7 +144,7 @@ private struct MapControls: View {
                     spin += 360
                 }
                 onRefresh()
-                Task { await viewModel.refresh() }
+                Task { await viewModel.refresh(userInitiated: true) }
             } label: {
                 label(Image(systemName: "arrow.clockwise").rotationEffect(.degrees(spin)))
             }

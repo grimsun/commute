@@ -82,6 +82,11 @@ public actor TimetableStore {
         TimetableInfo(try await downloadOnce())
     }
 
+    /// The schedule running on `date`'s service day, from the cache; never downloads.
+    public func scheduleDay(for date: Date) -> ScheduleDay? {
+        cachedTimetable()?.scheduleDay(for: date)
+    }
+
     /// What is cached, without downloading.
     public func info() -> TimetableInfo? {
         cachedTimetable().map(TimetableInfo.init)
