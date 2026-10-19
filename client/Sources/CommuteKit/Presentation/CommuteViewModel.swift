@@ -49,15 +49,10 @@ public final class CommuteViewModel {
     public private(set) var isUpdatingTimetable = false
     public private(set) var timetableError: String?
 
-    private(set) var departedCommutes: Set<CommuteKey> = []
+    /// Trips under way (and on which train) or ended by hand; saved in `departureLog`.
+    private(set) var trips = TripRecord()
     /// Location shows the rider away from the trip's starting place (false when unknown).
     public private(set) var isAwayFromStart = false
-    /// The train each departed commute is on, for "on your way" / "on the train".
-    private var departedTrains: [CommuteKey: TrainDeparture] = [:]
-    /// Train numbers saved with departures, for after a relaunch.
-    private var departedTrainNumbers: [CommuteKey: String] = [:]
-    /// Trips the rider ended by hand; location won't mark them again, even after a relaunch.
-    private var endedCommutes: Set<CommuteKey> = []
     private var isWatchingLocation = false
 
     private let profileStore: CommuteProfileStore
@@ -397,11 +392,9 @@ public final class CommuteViewModel {
     }
 
     private func isFinished(_ key: CommuteKey, at date: Date) -> Bool {
-        guard departedCommutes.contains(key), let plan = plans[.commute(key.direction)],
+        guard let plan = plans[.commute(key.direction)],
               CommuteKey(date: plan.targetLeave, direction: key.direction) == key else { return false }
-        if hasCompletedTrip(direction: key.direction, plan: plan) { return true }
-        guard let train = takenTrain(direction: key.direction, plan: plan) else { return false }
-        return date >= plan.doorArrival(for: train)
+        return trips.isComplete(key, in: plan, preferred: profile.preferredServices, now: date)
     }
 
     // MARK: Mode
@@ -598,10 +591,6 @@ public final class CommuteViewModel {
         plans[.commute(direction)]
     }
 
-    public var hasDepartedCurrentCommute: Bool {
-        departedCommutes.contains(currentCommute)
-    }
-
     /// Starts location (asking once) and checks for departure on every new fix; only when the
     /// rider allows it in Settings.
     private func watchLocation() async {
@@ -640,7 +629,7 @@ public final class CommuteViewModel {
         }
         // Only a commute day's trip counts as leaving for it; any other time it's just elsewhere.
         let weekday = Calendar.caltrain.component(.weekday, from: plan.targetLeave)
-        guard !hasDepartedCurrentCommute, !endedCommutes.contains(currentCommute),
+        guard !trips.isUnderWay(currentCommute), !trips.ended.contains(currentCommute),
               profile.commuteDays.contains(weekday) else { return }
 
         // Well past the station means already on a train (app opened mid-ride);
@@ -657,11 +646,7 @@ public final class CommuteViewModel {
 
     /// Of the trains running right now, the one whose timetable position is closest to the rider.
     private func ridingTrain(in plan: CommutePlan, near fix: LocationFix, now date: Date) async -> TrainDeparture? {
-        let running = plan.enRoute.filter {
-            !$0.isCancelled && profile.preferredServices.contains($0.service)
-                && plan.attempts(for: $0).leaveAt >= plan.targetLeave
-                && $0.departureTime <= date && date < $0.arrivalTime
-        }
+        let running = plan.runningTrains(preferred: profile.preferredServices, at: date)
         guard running.count > 1 else { return running.first }
         var best: (train: TrainDeparture, distance: Double)?
         for train in running {
@@ -674,25 +659,14 @@ public final class CommuteViewModel {
         return best?.train ?? running.last
     }
 
-    /// The most recent preferred train for this trip (the target or later) that has left but not yet arrived.
-    private static func likelyRidingTrain(in plan: CommutePlan, profile: CommuteProfile, now: Date) -> TrainDeparture? {
-        plan.enRoute.last {
-            !$0.isCancelled && profile.preferredServices.contains($0.service)
-                && plan.attempts(for: $0).leaveAt >= plan.targetLeave
-                && $0.departureTime <= now && now < $0.arrivalTime
-        }
-    }
-
     /// Marks the commute on screen as under way on `train`, by hand: "On my way" on the card,
     /// or "I'm taking this train" on a row. Works with or without location.
     public func takeTrain(_ train: TrainDeparture) async {
         guard mode == .commute, let plan = commutePlan,
               plan.upcoming.contains(where: { $0.id == train.id }),
               now() < plan.doorArrival(for: train) else { return }
-        endedCommutes.remove(currentCommute)
         withAnimation(.smooth(duration: 0.35)) {
-            departedCommutes.insert(currentCommute)
-            departedTrains[currentCommute] = train
+            trips.take(train.trainNumber, for: currentCommute)
         }
         await markDeparted(on: train)
     }
@@ -701,12 +675,9 @@ public final class CommuteViewModel {
     /// alerts. Location won't mark it again.
     public func endTrip() async {
         let key = currentCommute
-        guard departedCommutes.contains(key) else { return }
-        endedCommutes.insert(key)
+        guard trips.isUnderWay(key) else { return }
         withAnimation(.smooth(duration: 0.35)) {
-            departedCommutes.remove(key)
-            departedTrains[key] = nil
-            departedTrainNumbers[key] = nil
+            trips.end(key)
         }
         await departureLog.markEnded(key)
         await loadPaths()
@@ -717,10 +688,8 @@ public final class CommuteViewModel {
     /// Silences the rest of this commute's alerts and remembers which train the rider is taking.
     private func markDeparted(on train: TrainDeparture) async {
         let key = currentCommute
-        departedTrains[key] = train
-        departedTrainNumbers[key] = train.trainNumber
+        trips.take(train.trainNumber, for: key)
         await departureLog.markDeparted(key, trainNumber: train.trainNumber)
-        departedCommutes.insert(key)
         await loadPaths()
         await syncLiveActivity()
         await rescheduleAlerts()
@@ -747,29 +716,9 @@ public final class CommuteViewModel {
         }
     }
 
-    /// The train taken on a departed trip. After a relaunch only the departure is remembered,
-    /// so it is inferred from the timetable. One rule for the card, the map and alerts.
+    /// The train taken on a departed trip; one rule (`TripRecord`) for the card, map and alerts.
     private func takenTrain(direction: Direction, plan: CommutePlan) -> TrainDeparture? {
-        let key = CommuteKey(date: plan.targetLeave, direction: direction)
-        guard departedCommutes.contains(key) else { return nil }
-        // The plan's copy carries the latest delays.
-        if let number = departedTrains[key]?.trainNumber ?? departedTrainNumbers[key] {
-            if let current = (plan.upcoming + plan.enRoute).first(where: { $0.trainNumber == number }) {
-                return current
-            }
-            // Gone from the plan: the trip is over, unless this session still holds it.
-            return departedTrains[key]
-        }
-        return Self.likelyRidingTrain(in: plan, profile: profile, now: now())
-            ?? plan.train?.train
-    }
-
-    /// A known train that is no longer in the plan has delivered the rider: the trip is done.
-    private func hasCompletedTrip(direction: Direction, plan: CommutePlan) -> Bool {
-        let key = CommuteKey(date: plan.targetLeave, direction: direction)
-        guard departedCommutes.contains(key), departedTrains[key] == nil,
-              let number = departedTrainNumbers[key] else { return false }
-        return !(plan.upcoming + plan.enRoute).contains { $0.trainNumber == number }
+        trips.takenTrain(for: CommuteKey(date: plan.targetLeave, direction: direction), in: plan, preferred: profile.preferredServices, now: now())
     }
 
     #if DEBUG
@@ -794,9 +743,11 @@ public final class CommuteViewModel {
 
     private func loadDepartures() async {
         let today = DateKey.key(for: now())
-        departedCommutes = await departureLog.departed(since: today)
-        departedTrainNumbers = await departureLog.trainNumbers(since: today)
-        endedCommutes = await departureLog.ended(since: today)
+        trips = TripRecord(
+            departed: await departureLog.departed(since: today),
+            trainNumbers: await departureLog.trainNumbers(since: today),
+            ended: await departureLog.ended(since: today)
+        )
     }
 
     private func rescheduleAlerts() async {
@@ -813,11 +764,13 @@ public final class CommuteViewModel {
                 commutePicks[CommuteKey(date: target, direction: direction)] = tripID
             }
         }
-        var alerts = await planner.alerts(profile: profile, now: now(), skipping: departedCommutes, picks: commutePicks)
+        var alerts = await planner.alerts(profile: profile, now: now(), skipping: trips.departed, picks: commutePicks)
         // On board: a heads-up just before the rider's stop.
         let date = now()
-        for (key, train) in departedTrains {
-            guard let destination = StationCatalog.station(id: profile.destinationStationID(for: key.direction)) else { continue }
+        for key in trips.departed {
+            guard let plan = plans[.commute(key.direction)], CommuteKey(date: plan.targetLeave, direction: key.direction) == key,
+                  let train = trips.takenTrain(for: key, in: plan, preferred: profile.preferredServices, now: date),
+                  let destination = StationCatalog.station(id: profile.destinationStationID(for: key.direction)) else { continue }
             let alert = LeaveAlertPlanner.arrivingAlert(for: train, destination: destination, key: key)
             if alert.fireDate > date {
                 alerts.append(alert)
