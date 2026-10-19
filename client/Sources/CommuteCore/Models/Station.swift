@@ -50,13 +50,16 @@ public enum StationCatalog {
     ]
 
     public static func station(id: String) -> Station? {
-        all.first { $0.id == id }
+        positions[id].map { all[$0] }
     }
 
     /// Position along the line, 0 = San Francisco.
     public static func index(of id: String) -> Int? {
-        all.firstIndex { $0.id == id }
+        positions[id]
     }
+
+    /// Looked up on every render (stop lists, map, cards), so indexed once.
+    private static let positions: [String: Int] = Dictionary(uniqueKeysWithValues: all.enumerated().map { ($1.id, $0) })
 
     /// Stations without regular service: Stanford only opens for football game days.
     public static let specialServiceOnly: Set<String> = ["stanford"]

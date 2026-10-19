@@ -209,9 +209,13 @@ public final class CommuteViewModel {
         do {
             var newPlans = try await computePlans(at: date)
             // Live delays only around a trip, and only as often as the feed allows; then re-plan with them.
+            // Re-planned only when predictions changed since the plans above were made.
             if let feed = services.liveFeed, wantsLiveData(newPlans, at: date) {
+                let used = await feed.latest()?.fetchedAt
                 await feed.refreshIfDue(manual: userInitiated)
-                newPlans = try await computePlans(at: date)
+                if await feed.latest()?.fetchedAt != used {
+                    newPlans = try await computePlans(at: date)
+                }
             }
             guard generation == refreshGeneration else { return }
             noteMissedTrains(replacedBy: newPlans, at: date)

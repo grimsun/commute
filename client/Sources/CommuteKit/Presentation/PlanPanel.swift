@@ -29,6 +29,11 @@ struct PlanPanel: View {
     /// Cheap enough to do every second, so stage changes land on time.
     private static let tick: TimeInterval = 1
 
+    /// Paused while scrolling; compact shows no countdowns, so a minute is enough there.
+    private var tickInterval: TimeInterval {
+        isScrolling ? 3600 : isCompact ? 60 : Self.tick
+    }
+
     var body: some View {
         // Read observable state here, outside the TimelineView, so changes redraw at once
         // instead of waiting for the next tick.
@@ -44,7 +49,7 @@ struct PlanPanel: View {
         let isOtherDay = isSchedule && viewModel.scheduleDayOffset != 0
         return ScrollViewReader { scroller in
             ScrollView {
-                SwiftUI.TimelineView(.periodic(from: .now, by: isScrolling ? 3600 : Self.tick)) { _ in
+                SwiftUI.TimelineView(.periodic(from: .now, by: tickInterval)) { _ in
                     // Another day's schedule reads as if it were that day at this time.
                     let now = viewModel.displayDate(for: viewModel.currentDate())
                     // Travelling until the door-arrival time; evaluated every tick so it ends on time.
@@ -80,7 +85,9 @@ struct PlanPanel: View {
                             onCollapsedHeightChange(height, plan == nil)
                         }
 
-                        if let plan {
+                        // Collapsed, only the header and card show: nothing peeks in under them, and
+                        // the list isn't laid out every second while it can't be seen.
+                        if let plan, isExpanded {
                             Group {
                             if let notice = plan.transitNotice {
                                 Card {
@@ -119,15 +126,14 @@ struct PlanPanel: View {
                             }
                             footer(plan: plan)
                             }
-                            // Collapsed, only the header and card show; nothing peeks in under them.
-                            .opacity(isExpanded ? 1 : 0)
-                            .animation(.smooth(duration: 0.25), value: isExpanded)
+                            .transition(.opacity)
                         }
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 24)
                     // Stage changes (on track → get ready → leave → next train) and row states animate.
-                    .animation(.smooth(duration: 0.35), value: plan.map { PanelPhase(plan: $0, now: now) })
+                    .animation(.smooth(duration: 0.35), value: plan.map { PanelPhase(plan: $0, now: now, includesRows: isExpanded) })
+                    .animation(.smooth(duration: 0.25), value: isExpanded)
                 }
             }
             .scrollIndicators(.hidden)
@@ -311,12 +317,13 @@ struct PlanPanel: View {
 struct PanelPhase: Hashable {
     let trainID: String?
     let urgency: Urgency?
+    /// Row states, only while the list shows; these are worked out every tick.
     let rows: [String]
 
-    init(plan: CommutePlan, now: Date) {
+    init(plan: CommutePlan, now: Date, includesRows: Bool) {
         trainID = plan.train?.train.id
         urgency = plan.train.map { Urgency(attempts: $0.attempts, now: now) }
-        rows = plan.upcoming.map { "\($0.id):\(RowStatus(train: $0, plan: plan, now: now))" }
+        rows = includesRows ? plan.upcoming.map { "\($0.id):\(RowStatus(train: $0, plan: plan, now: now))" } : []
     }
 }
 
