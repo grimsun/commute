@@ -81,6 +81,16 @@ enum Format {
         }
     }
 
+    /// "Saturday".
+    static func weekday(_ date: Date) -> String {
+        date.formatted(Date.FormatStyle(timeZone: Calendar.caltrain.timeZone).weekday(.wide))
+    }
+
+    /// "Oct 24".
+    static func shortDate(_ date: Date) -> String {
+        date.formatted(Date.FormatStyle(timeZone: Calendar.caltrain.timeZone).month(.abbreviated).day())
+    }
+
     /// "8 min", "1h 52 min", "2h".
     static func minutes(_ interval: TimeInterval) -> String {
         let minutes = max(0, Int((interval / 60).rounded()))
@@ -90,13 +100,10 @@ enum Format {
         return minutes % 60 == 0 ? "\(minutes / 60)h" : "\(minutes / 60)h \(minutes % 60) min"
     }
 
-    /// Time left until `date`, rounded up so a countdown never reaches 0 early: "22 min", "1h 52 min", "<1 min".
+    /// Time left until `date`, rounded up so a countdown never reaches 0 early: "22 min", "1h 52 min",
+    /// and "1 min" through the last minute.
     static func countdown(to date: Date, from now: Date) -> String {
-        let seconds = date.timeIntervalSince(now)
-        if seconds < 60 {
-            return "<1 min"
-        }
-        return minutes(ceil(seconds / 60) * 60)
+        minutes(max(1, ceil(date.timeIntervalSince(now) / 60)) * 60)
     }
 
     /// "in 12 min", "now", "3 min ago".

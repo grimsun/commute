@@ -25,6 +25,7 @@ struct SettingsView: View {
                 travelSection
                 scheduleSection
                 alertsSection
+                locationSection
                 trainTypesSection
                 carSection
             }
@@ -277,6 +278,18 @@ struct SettingsView: View {
             if draft.dataSource.mode == .standalone {
                 Text("Scheduled a week ahead from the timetable, so they arrive even if the app stays closed. They can’t follow delays. With location access, a trip’s remaining alerts stop once you’ve left.")
             }
+        }
+    }
+
+    private var locationSection: some View {
+        Section {
+            Toggle("Notice when I leave", isOn: $draft.usesLocation)
+        } header: {
+            Text("Location")
+        } footer: {
+            Text(draft.usesLocation
+                 ? "While the app is open, your location shows when you’ve left home or work, or are already on a train. You can still tap On my way."
+                 : "Location isn’t used. Tap On my way on the card, or touch and hold a train and choose I’m taking this train.")
         }
     }
 

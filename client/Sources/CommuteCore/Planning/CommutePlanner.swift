@@ -113,6 +113,7 @@ public struct DefaultPlanner: CommutePlanning {
             )
         }
 
+        let egressTime = TimeInterval(profile.egressMinutes(for: direction) * 60)
         let departed = all.filter { $0.departureTime < now }.suffix(Self.departedShown)
         let upcoming = Array(departed) + all.filter { $0.departureTime >= now }
 
@@ -123,11 +124,15 @@ public struct DefaultPlanner: CommutePlanning {
             destinationStation: destinationStation,
             targetLeave: targetLeave,
             accessTime: accessTime,
-            egressTime: TimeInterval(profile.egressMinutes(for: direction) * 60),
+            egressTime: egressTime,
             safetyBuffer: safetyBuffer,
             prepLeadTime: prepLeadTime,
             train: trainOption,
             upcoming: upcoming,
+            // Until the rider could reach the door, so "almost there" still knows its train.
+            enRoute: all.filter {
+                $0.departureTime < now && now < $0.arrivalTime.addingTimeInterval(egressTime) && !$0.isCancelled
+            },
             transitSource: snapshot.source,
             transitFetchedAt: snapshot.fetchedAt,
             transitNotice: snapshot.notice,

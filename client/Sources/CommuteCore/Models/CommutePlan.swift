@@ -87,6 +87,9 @@ public struct CommutePlan: Equatable, Sendable {
     /// The last couple of departed trains, then every upcoming train of all services,
     /// including cancelled ones.
     public var upcoming: [TrainDeparture]
+    /// Departed trains the rider could still be travelling with (until the door arrival after
+    /// them), including ones too old for `upcoming`.
+    public var enRoute: [TrainDeparture]
     public var transitSource: TransitDataSource
     public var transitFetchedAt: Date
     public var transitNotice: String?
@@ -105,6 +108,7 @@ public struct CommutePlan: Equatable, Sendable {
         prepLeadTime: TimeInterval,
         train: TrainOption?,
         upcoming: [TrainDeparture],
+        enRoute: [TrainDeparture] = [],
         transitSource: TransitDataSource,
         transitFetchedAt: Date,
         transitNotice: String? = nil,
@@ -121,6 +125,7 @@ public struct CommutePlan: Equatable, Sendable {
         self.prepLeadTime = prepLeadTime
         self.train = train
         self.upcoming = upcoming
+        self.enRoute = enRoute
         self.transitSource = transitSource
         self.transitFetchedAt = transitFetchedAt
         self.transitNotice = transitNotice

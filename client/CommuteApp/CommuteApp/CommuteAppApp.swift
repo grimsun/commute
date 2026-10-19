@@ -8,7 +8,7 @@ struct CommuteAppApp: App {
     init() {
         LeaveAlertPresenter.shared.install()
         let timetable = TimetableStore(source: GTFSTimetableSource())
-        _viewModel = State(initialValue: CommuteViewModel(
+        let model = CommuteViewModel(
             profileStore: UserDefaultsProfileStore(),
             timetable: timetable,
             // Standalone vs server implementations are chosen here, per the saved data source.
@@ -18,7 +18,11 @@ struct CommuteAppApp: App {
             location: DeviceLocationProvider(),
             liveActivity: SystemLiveActivities(),
             now: DebugLaunch.clock
-        ))
+        )
+        #if DEBUG
+        model.debugTripNumber = UserDefaults.standard.string(forKey: "debugTrip")
+        #endif
+        _viewModel = State(initialValue: model)
     }
 
     var body: some Scene {
@@ -29,7 +33,7 @@ struct CommuteAppApp: App {
 }
 
 /// Debug-only launch arguments for screenshots and manual testing, e.g.
-/// `-debugNow 2026-10-19T07:45:00-07:00 -debugPanel large -debugSettings YES`.
+/// `-debugNow 2026-10-19T07:45:00-07:00 -debugPanel expanded -debugSettings YES -debugTrip 510`.
 enum DebugLaunch {
     static var clock: @Sendable () -> Date {
         #if DEBUG

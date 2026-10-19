@@ -52,14 +52,20 @@ services when the data source changes.
   to clear the override.
   A manual target expires when it can no longer be caught or its commute window ends.
 - Two modes, switched with the control at the top left. **Commute** plans leaving home and work as above.
-  **Schedule** shows the next trains between any two stations (tap either station name to change it,
-  ⇆ swaps them), with no travel time or buffer; the stations are remembered. The app opens in Commute
+  **Schedule** shows the next trains between any two stations (tap either station name to change it),
+  with no travel time or buffer; the stations are remembered. The pill at the top right names the timetable
+  on screen (Weekday, Weekend or Holiday); in Schedule a tap flips to the other one, showing the next
+  such day at the same time, and back to today. In Commute it's only a label. The arrow between the card's times
+  switches direction in Commute and swaps the stations in Schedule; refresh is at the left of the header. The app opens in Commute
   from two hours before a target leave time until its four-hour window ends, on commute days that
   aren't holidays, and in Schedule otherwise. A switch by hand lasts until that changes or the app
   returns from the background. Alerts, location tracking and the Lock Screen countdown follow the
   commute in either mode. Settings is the gear in the sheet header.
 - Automatic selection rolls forward for four hours after the target leave time, then moves to
   the next commute. Late evening windows continue across midnight. Tomorrow’s trains are labeled.
+- **On my way** (on the card within 90 minutes of the train) or **I’m taking this train** (touch and hold
+  any row, even one that already left) marks the trip by hand; **End trip** undoes it. Settings → Location
+  → **Notice when I leave** turns automatic detection on or off; off, location is never used.
 - With location access (while using the app), leaving the starting place during a trip marks it as
   departed: the card shows "You're on your way" / "You're on the train" and that trip's alerts stop.
   Without access, nothing changes.

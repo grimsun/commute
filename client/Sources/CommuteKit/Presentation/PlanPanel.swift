@@ -1,20 +1,30 @@
 import SwiftUI
 
-/// The bottom-sheet content. Collapsed, it shows the header and the next-train card and does not
-/// scroll, so any swipe expands the sheet. Expanded, it scrolls through the trains and car card.
+/// The bottom-sheet content. Compact, it shows just the train and its times. Collapsed, the header
+/// and the next-train card; neither scrolls, so any swipe resizes the sheet. Expanded, it scrolls
+/// through the trains and car card.
 struct PlanPanel: View {
     let viewModel: CommuteViewModel
-    let isExpanded: Bool
+    let panel: DashboardView.PanelSize
+    private var isExpanded: Bool { panel == .expanded }
+    private var isCompact: Bool { panel == .compact }
     let onOpenSettings: () -> Void
-    /// Reports the height of the collapsed content so the sheet can fit it exactly.
-    let onCollapsedHeightChange: (CGFloat) -> Void
+    /// Refresh in the header; also recenters the map.
+    let onRefresh: () -> Void
+    /// Reports the height of the collapsed content (and whether it is the loading card) so the
+    /// sheet can fit it exactly.
+    let onCollapsedHeightChange: (CGFloat, Bool) -> Void
+    /// Reports the height of the compact content: the card's train line and times.
+    let onCompactHeightChange: (CGFloat) -> Void
     /// Called after the rider sets a train as target, e.g. to collapse the sheet onto it.
     let onPickTrain: () -> Void
 
     /// While the list scrolls, the clock tick pauses so scrolling stays smooth.
     @State private var isScrolling = false
+    @State private var refreshSpin = 0.0
 
     private static let topID = "top"
+    private static let compactTopPadding: CGFloat = 22
     /// How often the card re-evaluates countdowns, colors and row states between refreshes.
     /// Cheap enough to do every second, so stage changes land on time.
     private static let tick: TimeInterval = 1
@@ -27,37 +37,51 @@ struct PlanPanel: View {
         let departedTrain = viewModel.departedTrain
         let trainPath = viewModel.trainPath
         let elsewhereTrain = viewModel.elsewhereTrain
-        let scheduleLabel = viewModel.scheduleDay?.shortLabel
         let scheduleDetail = viewModel.scheduleDay?.label
         let errorMessage = viewModel.errorMessage
         let isDownloading = viewModel.timetableInfo == nil
         let isSchedule = viewModel.mode == .schedule
+        let isOtherDay = isSchedule && viewModel.scheduleDayOffset != 0
         return ScrollViewReader { scroller in
             ScrollView {
                 SwiftUI.TimelineView(.periodic(from: .now, by: isScrolling ? 3600 : Self.tick)) { _ in
-                    let now = viewModel.currentDate()
+                    // Another day's schedule reads as if it were that day at this time.
+                    let now = viewModel.displayDate(for: viewModel.currentDate())
                     // Travelling until the door-arrival time; evaluated every tick so it ends on time.
                     let tripInProgress = departedTrain.flatMap { train in
                         plan.map { now < $0.doorArrival(for: train) } == true ? train : nil
                     }
+                    let missedOption = tripInProgress == nil ? viewModel.missedOption(at: now) : nil
                     VStack(spacing: 14) {
                         VStack(spacing: 12) {
-                            header
+                            // Compact is only the card's top: the train and its times.
+                            if !isCompact {
+                                header
+                            }
                             if let plan {
-                                HeroCard(plan: plan, profile: routeProfile, now: now, tripInProgress: tripInProgress, isSchedule: isSchedule, elsewhereTrain: tripInProgress == nil ? elsewhereTrain : nil, path: trainPath, showsStops: isExpanded, scheduleLabel: scheduleLabel) { train in
+                                HeroCard(plan: plan, profile: routeProfile, now: now, tripInProgress: tripInProgress, isSchedule: isSchedule, isOtherDay: isOtherDay, elsewhereTrain: tripInProgress == nil ? elsewhereTrain : nil, missedOption: missedOption, path: trainPath, showsStops: isExpanded, isCompact: isCompact,
+                                         onTopHeightChange: { height in
+                                             // Plus the card's padding and the space above it.
+                                             onCompactHeightChange(height + 32 + Self.compactTopPadding)
+                                         },
+                                         onTakeTrain: isSchedule ? nil : { train in Task { await viewModel.takeTrain(train) } },
+                                         onEndTrip: isSchedule ? nil : { Task { await viewModel.endTrip() } },
+                                         onToggleDirection: { Task { await viewModel.toggleDirection() } }) { train in
                                     Task { await viewModel.pick(train) }
                                 }
                             } else {
                                 loadingCard(errorMessage: errorMessage, isDownloading: isDownloading)
                             }
                         }
-                        .padding(.top, 14)
+                        // Compact has no header, so the card keeps clear of the grabber itself.
+                        .padding(.top, isCompact ? Self.compactTopPadding : 14)
                         .id(Self.topID)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                            onCollapsedHeightChange(height)
+                            onCollapsedHeightChange(height, plan == nil)
                         }
 
                         if let plan {
+                            Group {
                             if let notice = plan.transitNotice {
                                 Card {
                                     Label(notice, systemImage: "exclamationmark.triangle.fill")
@@ -71,6 +95,7 @@ struct PlanPanel: View {
                                 highlightedID: tripInProgress?.id ?? elsewhereTrain?.id ?? plan.train?.train.id,
                                 isTripInProgress: tripInProgress != nil,
                                 isElsewhere: isSchedule || (tripInProgress == nil && elsewhereTrain != nil),
+                                isOtherDay: isOtherDay,
                                 scheduleLabel: scheduleDetail,
                                 onPick: { train in
                                     Task { await viewModel.pick(train) }
@@ -79,6 +104,13 @@ struct PlanPanel: View {
                                 onClearPick: {
                                     Task { await viewModel.clearPick() }
                                 },
+                                onTake: isSchedule ? nil : { train in
+                                    Task { await viewModel.takeTrain(train) }
+                                    onPickTrain()
+                                },
+                                onEndTrip: {
+                                    Task { await viewModel.endTrip() }
+                                },
                                 loadPath: { train in await viewModel.path(for: train) }
                             )
                             // Driving is moot once you're on your way, and between two stations.
@@ -86,6 +118,10 @@ struct PlanPanel: View {
                                 CarCard(plan: plan, now: now)
                             }
                             footer(plan: plan)
+                            }
+                            // Collapsed, only the header and card show; nothing peeks in under them.
+                            .opacity(isExpanded ? 1 : 0)
+                            .animation(.smooth(duration: 0.25), value: isExpanded)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -111,32 +147,38 @@ struct PlanPanel: View {
 
     // MARK: Header
 
-    /// A flip button, the stations and settings; not tappable as a whole, since this is where
-    /// people grab the sheet. Schedule mode makes each station a menu of all stations.
+    /// Refresh, the stations and settings; not tappable as a whole, since this is where people
+    /// grab the sheet. Schedule mode makes each station a menu of all stations. The direction
+    /// flips from the arrow on the card.
     private var header: some View {
         HStack(spacing: 10) {
             Button {
-                Task { await viewModel.toggleDirection() }
+                // One full turn as feedback; refreshes are usually too quick for a spinner.
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    refreshSpin += 360
+                }
+                onRefresh()
+                Task { await viewModel.refresh(userInitiated: true) }
             } label: {
-                Image(systemName: "arrow.left.arrow.right.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(.tint)
+                // Gray like the settings gear, so the two header buttons match.
+                Image(systemName: "arrow.clockwise")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(refreshSpin))
                     .frame(width: 36, height: 36)
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(viewModel.mode == .schedule ? "Swap stations" : "Switch direction")
-            .accessibilityValue(viewModel.mode == .schedule ? "" : viewModel.direction.title)
+            .disabled(!viewModel.isLoaded)
+            .accessibilityLabel("Refresh and recenter")
 
             Group {
                 if viewModel.mode == .schedule {
                     scheduleStations
                 } else {
-                    // "San Francisco → Palo Alto · To work" on one line; scales down rather than wrapping.
-                    (Text(routeTitle).font(.headline)
-                        + Text(" · \(viewModel.direction.title)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary))
+                    // "San Francisco → Palo Alto" on one line (the card says "To work"); scales down rather than wrapping.
+                    Text(routeTitle)
+                        .font(.headline)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                 }
@@ -322,26 +364,43 @@ private struct HeroCard: View {
     private var hasDeparted: Bool { tripInProgress != nil }
     /// Schedule mode: the next train between two stations, with no leave guidance.
     let isSchedule: Bool
+    /// Schedule mode showing another day: no countdowns, the day instead.
+    var isOtherDay = false
     /// The loading placeholder shows the "too late for…" line so the sheet is sized for it.
     var reservesMissedLine = false
     /// Sets a train as the target, from the "better train" hint.
     /// Away from the starting place and not travelling: show this next train without leave guidance.
     var elsewhereTrain: TrainDeparture? = nil
     private var isElsewhere: Bool { elsewhereTrain != nil }
+    /// A train that just became too late: "Missed it!" for a few seconds before the next one.
+    var missedOption: TrainOption? = nil
     /// Just the train: no countdown to leaving, since the rider's starting point is unknown.
     private var isNeutral: Bool { isElsewhere || isSchedule }
     /// Stops and track of the card's train, when loaded.
     var path: TrainPath? = nil
     /// Expanded sheet: the card adds the train's stops.
     var showsStops = false
-    /// "Weekday schedule" etc.; shown instead of "Scheduled" when there is no live data.
-    var scheduleLabel: String? = nil
+    /// Compact sheet: only the train line and its times.
+    var isCompact = false
+    /// Height of the train line and times, for sizing the compact sheet.
+    var onTopHeightChange: (CGFloat) -> Void = { _ in }
+    /// "On my way": the rider marks this train as the one they're taking. `nil` hides it.
+    var onTakeTrain: ((TrainDeparture) -> Void)? = nil
+    /// "End trip": not travelling after all.
+    var onEndTrip: (() -> Void)? = nil
+    /// The arrow between the times flips the direction (or swaps the stations).
+    var onToggleDirection: (() -> Void)? = nil
     var onPick: (TrainDeparture) -> Void = { _ in }
+
+    /// "On my way" appears this close to the train, when it is useful and not clutter.
+    private static let takeTrainLead: TimeInterval = 90 * 60
 
     var body: some View {
         Card {
             if let riding = tripInProgress {
                 content(TrainOption(train: riding, attempts: plan.attempts(for: riding), state: .leaveNow, fallback: nil))
+            } else if let missedOption {
+                content(missedOption)
             } else if let next = elsewhereTrain {
                 content(TrainOption(train: next, attempts: plan.attempts(for: next), state: .onTrack, fallback: nil))
             } else if let option = plan.train {
@@ -364,122 +423,211 @@ private struct HeroCard: View {
         let train = option.train
         // Once on the way, the leave countdown no longer applies; it is calm green until the train.
         let urgency: Urgency = hasDeparted ? .relaxed
+            : isOtherDay ? .neutral
             : isNeutral ? (now >= option.train.departureTime ? .missed : .neutral)
             : Urgency(attempts: option.attempts, now: now)
         return VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                ServiceBadge(service: train.service)
-                Text(trainTitle(train))
-                    .font(.subheadline.weight(.semibold))
-                    .accessibilityIdentifier("target-train")
-                if option.isManual {
-                    Image(systemName: "pin.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("Pinned")
-                }
-                Spacer()
-                // Untracked trains have only timetable times, so the schedule label fits them.
-                if (plan.transitSource != .live || train.isTracked != true), !train.isCancelled, let scheduleLabel {
-                    Text(scheduleLabel)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                } else {
-                    DelayLabel(train: train, isLive: plan.transitSource == .live && train.isTracked == true)
+            // The train and its times: all the compact sheet shows.
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    ServiceBadge(service: train.service)
+                    Text(trainTitle(train))
                         .font(.subheadline.weight(.semibold))
+                        .accessibilityIdentifier("target-train")
+                    if option.isManual {
+                        Image(systemName: "pin.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Pinned")
+                    }
+                    Spacer()
+                    // Live trains show their delay; others which way they run (the schedule type is on the list).
+                    if (plan.transitSource != .live || train.isTracked != true), !train.isCancelled {
+                        Text(boundLabel)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    } else {
+                        DelayLabel(train: train, isLive: plan.transitSource == .live && train.isTracked == true)
+                            .font(.subheadline.weight(.semibold))
+                    }
+                }
+
+                // Two rows, so the arrow sits on the times' line and the ride length on the stations'.
+                Grid(horizontalSpacing: 10, verticalSpacing: 1) {
+                    GridRow {
+                        timeText(train.departureTime)
+                            .gridColumnAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        directionArrow
+                        timeText(train.arrivalTime)
+                            .gridColumnAlignment(.trailing)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                    GridRow {
+                        stationText(plan.originStation.name, time: train.departureTime, scheduled: train.scheduledDeparture)
+                        Text(Format.minutes(train.arrivalTime.timeIntervalSince(train.departureTime)))
+                            .monospacedDigit()
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .fixedSize()
+                        stationText(plan.destinationStation.name, time: train.arrivalTime, scheduled: train.scheduledArrival)
+                    }
                 }
             }
-
-            HStack(spacing: 10) {
-                stop(time: train.departureTime, scheduled: train.scheduledDeparture, station: plan.originStation.name, alignment: .leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                // Ride length under the arrow.
-                VStack(spacing: 1) {
-                    Image(systemName: "arrow.right")
-                        .foregroundStyle(.tertiary)
-                    Text(Format.minutes(train.arrivalTime.timeIntervalSince(train.departureTime)))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-                stop(time: train.arrivalTime, scheduled: train.scheduledArrival, station: plan.destinationStation.name, alignment: .trailing)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                onTopHeightChange(height)
             }
 
-            Divider()
+            if !isCompact {
+                Divider()
 
-            VStack(alignment: .leading, spacing: 6) {
-                // One slot for a one-line notice, so the card keeps its size. On board it shows the
-                // next stop; otherwise a missed train takes priority over a better one.
-                if let next = nextStopLine(for: train) {
-                    Label(next, systemImage: "tram.fill")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.green)
-                        .contentTransition(.opacity)
-                        .accessibilityIdentifier("next-stop")
-                } else if let missed = missedLine(option) {
-                    Label(missed, systemImage: "xmark.circle.fill")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.red)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                        .accessibilityIdentifier("missed-train")
-                } else if let better = betterTrain(than: option) {
-                    Button {
-                        onPick(better)
-                    } label: {
-                        Label(betterTrainText(better, than: option.train), systemImage: "bolt.fill")
+                VStack(alignment: .leading, spacing: 6) {
+                    // One slot for a one-line notice, so the card keeps its size. On board it shows the
+                    // next stop; otherwise a missed train takes priority over a better one.
+                    if let next = nextStopLine(for: train) {
+                        Label(next, systemImage: "tram.fill")
                             .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.tint)
+                            .foregroundStyle(.secondary)
+                            .contentTransition(.opacity)
+                            .accessibilityIdentifier("next-stop")
+                    } else if let missed = missedLine(option) {
+                        Label(missed, systemImage: "xmark.circle.fill")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.red)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                            .accessibilityIdentifier("missed-train")
+                    } else if let better = betterTrain(than: option) {
+                        Button {
+                            onPick(better)
+                        } label: {
+                            Label(betterTrainText(better, than: option.train), systemImage: "bolt.fill")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tint)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                        .buttonStyle(.plain)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                        .accessibilityHint("Pins this train")
+                        .accessibilityIdentifier("better-train")
+                    }
+
+                    HStack(spacing: 8) {
+                        Text(statusTitle(option, urgency: urgency))
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .foregroundStyle(urgency.color)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .accessibilityIdentifier("leave-headline")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        tripButton(for: option.train, urgency: urgency)
+                    }
+
+                    leaveLine(option, urgency: urgency)
+                        .font(.title3.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .contentTransition(.numericText())
+                        .accessibilityIdentifier("leave-countdown")
+
+                    // The trip from home or work does not apply when starting from somewhere else; the
+
+                    // train after this one does.
+                    if isNeutral {
+                        Text(followingLine(after: train))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
+                            .accessibilityIdentifier("following-train")
+                    } else {
+                        Text(journeyLine(train))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .accessibilityIdentifier("journey")
                     }
-                    .buttonStyle(.plain)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                    .accessibilityHint("Pins this train")
-                    .accessibilityIdentifier("better-train")
-                }
-
-                Text(statusTitle(option, urgency: urgency))
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(urgency.color)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .accessibilityIdentifier("leave-headline")
-
-                leaveLine(option, urgency: urgency)
-                    .font(.title3.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .contentTransition(.numericText())
-                    .accessibilityIdentifier("leave-countdown")
-
-                // The trip from home or work does not apply when starting from somewhere else.
-                if isSchedule {
-                    Text(followingLine(after: train))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .accessibilityIdentifier("following-train")
-                } else if !isElsewhere {
-                    Text(journeyLine(train))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .accessibilityIdentifier("journey")
                 }
             }
 
             // Expanded: the ride stop by stop, with where the train is now.
             if showsStops, let path = matchingPath(for: train) {
                 Divider()
-                StopList(path: path, originID: plan.originStation.id, destinationID: plan.destinationStation.id, delay: TimeInterval(train.delaySeconds), now: now)
+                StopList(path: path, originID: plan.originStation.id, destinationID: plan.destinationStation.id, delay: TimeInterval(train.delaySeconds), now: now, isCondensed: true)
                     .transition(.opacity)
             }
 
+        }
+    }
+
+    /// "Southbound" / "Northbound".
+    private var boundLabel: String {
+        let from = StationCatalog.index(of: plan.originStation.id) ?? 0
+        let to = StationCatalog.index(of: plan.destinationStation.id) ?? 0
+        return to > from ? "Southbound" : "Northbound"
+    }
+
+    @ViewBuilder
+    private var directionArrow: some View {
+        if let onToggleDirection {
+            Button(action: onToggleDirection) {
+                // Filled and round, like "On my way", so it reads as a button.
+                Image(systemName: "arrow.right")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(Color.accentColor, in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isSchedule ? "Swap stations" : "Switch direction")
+            .accessibilityValue(isSchedule ? "" : plan.direction.title)
+            .accessibilityIdentifier("switch-direction")
+        } else {
+            Image(systemName: "arrow.right")
+                .frame(width: 28, height: 28)
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    /// "On my way" before leaving; "End trip" once under way.
+    @ViewBuilder
+    private func tripButton(for train: TrainDeparture, urgency: Urgency) -> some View {
+        if hasDeparted, let onEndTrip {
+            Button(action: onEndTrip) {
+                Label("End trip", systemImage: "xmark")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.secondary.opacity(0.12), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            .accessibilityHint("You’re not taking this trip; brings back its plan and alerts")
+            .accessibilityIdentifier("end-trip")
+        } else if !hasDeparted, let onTakeTrain, urgency != .missed,
+                  train.departureTime > now, train.departureTime.timeIntervalSince(now) <= Self.takeTrainLead {
+            Button {
+                onTakeTrain(train)
+            } label: {
+                // Away from home or work, the rider is likely at or near the station already.
+                Label(isElsewhere ? "On this train" : "On my way",
+                      systemImage: isElsewhere ? "tram.fill" : profile.accessMode == .bike ? "bicycle" : "figure.walk")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.accentColor, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            .accessibilityHint("Marks this train as the one you’re taking")
+            .accessibilityIdentifier("on-my-way")
         }
     }
 
@@ -490,11 +638,16 @@ private struct HeroCard: View {
 
     /// "You're on track", "Get ready", "Leave soon", "Leave now", or "Missed it" just before re-planning.
     private func statusTitle(_ option: TrainOption, urgency: Urgency) -> String {
+        if isOtherDay {
+            return Format.weekday(option.train.departureTime)
+        }
         if isSchedule {
             return urgency == .missed ? "Departed" : "Next train"
         }
         if hasDeparted {
-            return now < option.train.departureTime ? "You’re on your way" : "You’re on the train"
+            if now < option.train.departureTime { return "You’re on your way" }
+            // Off the train, on the last leg to the door.
+            return now < option.train.arrivalTime ? "You’re on the train" : "Almost there"
         }
         if isElsewhere {
             return "Next train"
@@ -503,7 +656,7 @@ private struct HeroCard: View {
         case .relaxed: return "You’re on track"
         case .soon: return "Get ready"
         case .urgent: return now >= option.attempts.leaveAt ? "Leave now" : "Leave soon"
-        case .missed: return "Missed it"
+        case .missed: return "Missed it!"
         case .neutral: return "Next train"
         }
     }
@@ -513,6 +666,9 @@ private struct HeroCard: View {
         let attempts = option.attempts
         let colored = { (text: String) in Text(text).foregroundStyle(urgency.color) }
         let detail = { (text: String) in Text(text).foregroundStyle(.secondary) }
+        if isOtherDay {
+            return Text("Departs ") + colored(Format.time(option.train.departureTime)) + detail(" · \(Format.shortDate(option.train.departureTime))")
+        }
         if isSchedule && urgency == .missed {
             return detail("Finding the next train…")
         }
@@ -524,9 +680,17 @@ private struct HeroCard: View {
             if now < train.departureTime {
                 return Text("Train in ") + colored(Format.countdown(to: train.departureTime, from: now)) + detail(" · departs \(Format.time(train.departureTime))")
             }
-            return Text("Arrives in ") + colored(Format.countdown(to: train.arrivalTime, from: now)) + detail(" · \(plan.destinationStation.name) \(Format.time(train.arrivalTime))")
+            if now < train.arrivalTime {
+                return Text("Arrives in ") + colored(Format.countdown(to: train.arrivalTime, from: now)) + detail(" · \(plan.destinationStation.name) \(Format.time(train.arrivalTime))")
+            }
+            let door = plan.doorArrival(for: train)
+            return Text(plan.direction == .homeToWork ? "At work in " : "Home in ") + colored(Format.countdown(to: door, from: now)) + detail(" · \(Format.time(door))")
         }
         if urgency == .missed {
+            // The plan already moved on; name the train it moved to.
+            if let next = plan.train?.train, next.id != option.train.id {
+                return Text("Next: ") + detail("\(next.service.displayName) \(next.trainNumber) at \(Format.time(next.departureTime))")
+            }
             return detail("Finding the next train…")
         }
         if now < attempts.leaveAt {
@@ -539,8 +703,12 @@ private struct HeroCard: View {
     private func journeyLine(_ train: TrainDeparture) -> String {
         let arrival = "\(destinationEmoji) at \(Format.time(plan.doorArrival(for: train)))"
         if hasDeparted && now >= train.departureTime {
-            // On board: the line above names the station; only the last leg remains.
             let mode = profile.accessMode == .bike ? "🚲" : "🚶"
+            // Off the train, the line above already gives the door time.
+            if now >= train.arrivalTime {
+                return "\(Format.minutes(plan.egressTime)) by \(mode) from \(plan.destinationStation.name)"
+            }
+            // On board: the line above names the station; only the last leg remains.
             return "Then \(Format.minutes(plan.egressTime)) by \(mode) · \(arrival)"
         }
         let mode = profile.accessMode == .bike ? "🚲" : "🚶"
@@ -576,7 +744,7 @@ private struct HeroCard: View {
 
     /// On board: "Next stop: San Mateo at 6:12 PM", or "Your stop is next · 6:46 PM".
     private func nextStopLine(for train: TrainDeparture) -> String? {
-        guard hasDeparted, now >= train.departureTime, let path = matchingPath(for: train),
+        guard hasDeparted, now >= train.departureTime, now < train.arrivalTime, let path = matchingPath(for: train),
               let next = path.nextStop(at: now, delay: TimeInterval(train.delaySeconds)) else { return nil }
         let time = Format.time(next.arrival.addingTimeInterval(TimeInterval(train.delaySeconds)))
         if next.stationID == plan.destinationStation.id {
@@ -588,7 +756,7 @@ private struct HeroCard: View {
 
     /// An express overtaking the planned train, say; never while travelling or on the placeholder.
     private func betterTrain(than option: TrainOption) -> TrainDeparture? {
-        guard !isNeutral, !hasDeparted, !reservesMissedLine else { return nil }
+        guard !isNeutral, !hasDeparted, !reservesMissedLine, missedOption == nil else { return nil }
         return plan.betterTrain(than: option.train, preferred: profile.preferredServices)
     }
 
@@ -613,23 +781,26 @@ private struct HeroCard: View {
         return missed.map { "Too late for the \(Format.time($0.departureTime)) train" }
     }
 
-    private func stop(time: Date, scheduled: Date, station: String, alignment: HorizontalAlignment) -> some View {
-        VStack(alignment: alignment, spacing: 1) {
-            Text(Format.time(time))
-                .font(.title3.weight(.semibold))
-                .monospacedDigit()
-                .lineLimit(1)
-            HStack(spacing: 4) {
-                if abs(time.timeIntervalSince(scheduled)) >= 60 {
-                    Text(Format.time(scheduled))
-                        .strikethrough()
-                }
-                Text(station)
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+    private func timeText(_ time: Date) -> some View {
+        Text(Format.time(time))
+            .font(.title.weight(.semibold))
+            .monospacedDigit()
             .lineLimit(1)
+            .minimumScaleFactor(0.7)
+    }
+
+    /// The station, after the struck-through timetable time when the train runs late.
+    private func stationText(_ station: String, time: Date, scheduled: Date) -> some View {
+        HStack(spacing: 4) {
+            if abs(time.timeIntervalSince(scheduled)) >= 60 {
+                Text(Format.time(scheduled))
+                    .strikethrough()
+            }
+            Text(station)
         }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
     }
 }
 
@@ -664,10 +835,15 @@ private struct UpcomingTrainsCard: View {
     let isTripInProgress: Bool
     /// Away from home or work: rows count down to departure, with no "too late" judgement.
     let isElsewhere: Bool
+    /// Another day's schedule: rows have no countdowns or "departed".
+    var isOtherDay = false
     /// "Weekday schedule" etc., next to the list title.
     let scheduleLabel: String?
     let onPick: (TrainDeparture) -> Void
     let onClearPick: () -> Void
+    /// "I'm taking this train"; `nil` outside commute mode.
+    let onTake: ((TrainDeparture) -> Void)?
+    let onEndTrip: () -> Void
     /// Stops and times for a train, loaded when its row is opened.
     let loadPath: (TrainDeparture) async -> TrainPath?
 
@@ -804,7 +980,7 @@ private struct UpcomingTrainsCard: View {
         return Button {
             toggleStops(for: train)
         } label: {
-            TrainRow(train: train, plan: plan, now: now, status: status, isTarget: isTarget, isTaking: isTarget && isTripInProgress, isElsewhere: isElsewhere, showsCountdown: showsCountdown)
+            TrainRow(train: train, plan: plan, now: now, status: status, isTarget: isTarget, isTaking: isTarget && isTripInProgress, isElsewhere: isElsewhere, isOtherDay: isOtherDay, showsCountdown: showsCountdown && !isOtherDay)
         }
         .buttonStyle(.plain)
             // The long-press preview lifts the row; give it the card's surface and rounded corners.
@@ -824,6 +1000,18 @@ private struct UpcomingTrainsCard: View {
                         Label("Unpin", systemImage: "pin.slash")
                     }
                 }
+                if canTake(train, isTarget: isTarget), let onTake {
+                    Button {
+                        onTake(train)
+                    } label: {
+                        Label("I’m taking this train", systemImage: "tram")
+                    }
+                }
+                if isTarget && isTripInProgress {
+                    Button(action: onEndTrip) {
+                        Label("I’m not on this train", systemImage: "xmark")
+                    }
+                }
             }
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("schedule-train-\(train.trainNumber)")
@@ -834,7 +1022,19 @@ private struct UpcomingTrainsCard: View {
                 if isTarget && plan.train?.isManual == true {
                     Button("Unpin", action: onClearPick)
                 }
+                if canTake(train, isTarget: isTarget), let onTake {
+                    Button("I’m taking this train") { onTake(train) }
+                }
+                if isTarget && isTripInProgress {
+                    Button("I’m not on this train", action: onEndTrip)
+                }
             }
+    }
+
+    /// Any train not cancelled and not yet at the rider's stop, including one already left
+    /// (opened the app on board).
+    private func canTake(_ train: TrainDeparture, isTarget: Bool) -> Bool {
+        !(isTarget && isTripInProgress) && !train.isCancelled && now < train.arrivalTime
     }
 }
 
@@ -845,44 +1045,122 @@ private struct StopList: View {
     let destinationID: String
     let delay: TimeInterval
     let now: Date
+    /// Starts folded to the ends and where the train is now; a tap shows every stop.
+    var isCondensed = false
+
+    @State private var showsAll = false
+
+    private enum Item: Identifiable {
+        case stop(index: Int)
+        /// Stops folded away between two shown ones.
+        case gap(after: Int, count: Int)
+
+        var id: String {
+            switch self {
+            case .stop(let index): "stop-\(index)"
+            case .gap(let after, _): "gap-\(after)"
+            }
+        }
+    }
 
     var body: some View {
         let stops = path.stops(from: originID, to: destinationID)
         let position = path.position(at: now, delay: delay)
         // Highlighted only once the train is moving toward the rider's stops.
-        let next = path.position(at: now, delay: delay) == nil ? nil : path.nextStop(at: now, delay: delay)
+        let next = position == nil ? nil : path.nextStop(at: now, delay: delay)
+        let current = stops.firstIndex { $0.stationID == (position?.stationID ?? next?.stationID) }
+        let items = items(count: stops.count, current: current)
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(stops.enumerated()), id: \.offset) { index, stop in
-                let passed = stop.departure.addingTimeInterval(delay) < now && position?.stationID != stop.stationID
-                let isEnd = stop.stationID == originID || stop.stationID == destinationID
-                let isNext = stop.stationID == next?.stationID
-                HStack(spacing: 10) {
-                    // The rail: a dot per stop joined by a line; the current stop is a ring.
-                    ZStack {
-                        if index > 0 {
-                            Rectangle().fill(Color.secondary.opacity(0.3)).frame(width: 2).offset(y: -11).frame(height: 22)
-                        }
-                        Circle()
-                            .fill(isNext ? Color.green : position?.stationID == stop.stationID ? Color.accentColor : (passed ? Color.secondary.opacity(0.4) : Color.secondary))
-                            .frame(width: isEnd || isNext ? 9 : 7, height: isEnd || isNext ? 9 : 7)
-                    }
-                    .frame(width: 14, height: 22)
-
-                    Text(StationCatalog.station(id: stop.stationID)?.name ?? stop.stationID)
-                        .font(.subheadline.weight(isEnd || isNext ? .semibold : .regular))
-                        .foregroundStyle(isNext ? AnyShapeStyle(.green) : AnyShapeStyle(.primary))
-                    Spacer()
-                    Text(Format.time((stop.stationID == destinationID ? stop.arrival : stop.departure).addingTimeInterval(delay)))
-                        .font(.subheadline)
-                        .monospacedDigit()
+            ForEach(items) { item in
+                switch item {
+                case .stop(let index):
+                    stopRow(stops[index], isFirst: index == 0, position: position, next: next)
+                case .gap(_, let count):
+                    gapRow(count: count)
                 }
-                .foregroundStyle(passed ? .secondary : .primary)
-                .opacity(passed ? 0.6 : 1)
             }
         }
         .padding(.leading, 12)
         .padding(.vertical, 6)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard isCondensed, stops.count > 3 else { return }
+            withAnimation(.smooth(duration: 0.3)) {
+                showsAll.toggle()
+            }
+        }
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isCondensed ? .isButton : [])
+        .accessibilityHint(isCondensed ? (showsAll ? "Shows fewer stops" : "Shows every stop") : "")
+    }
+
+    /// Every stop, or the first, the current one and the last with gaps between.
+    private func items(count: Int, current: Int?) -> [Item] {
+        guard isCondensed, !showsAll, count > 3 else { return (0..<count).map { .stop(index: $0) } }
+        let shown = Set([0, count - 1] + (current.map { [$0] } ?? [])).sorted()
+        var items: [Item] = []
+        for (position, index) in shown.enumerated() {
+            if position > 0 {
+                let hidden = index - shown[position - 1] - 1
+                if hidden > 0 {
+                    items.append(.gap(after: shown[position - 1], count: hidden))
+                }
+            }
+            items.append(.stop(index: index))
+        }
+        return items
+    }
+
+    private func stopRow(_ stop: TrainPath.StopTime, isFirst: Bool, position: TrainPosition?, next: TrainPath.StopTime?) -> some View {
+        let passed = stop.departure.addingTimeInterval(delay) < now && position?.stationID != stop.stationID
+        let isEnd = stop.stationID == originID || stop.stationID == destinationID
+        let isNext = stop.stationID == next?.stationID
+        return HStack(spacing: 10) {
+            // The rail: a dot per stop joined by a line; the current stop is a ring.
+            ZStack {
+                if !isFirst {
+                    Rectangle().fill(Color.secondary.opacity(0.3)).frame(width: 2).offset(y: -11).frame(height: 22)
+                }
+                Circle()
+                    .fill(isNext ? Color.green : position?.stationID == stop.stationID ? Color.accentColor : (passed ? Color.secondary.opacity(0.4) : Color.secondary))
+                    .frame(width: isEnd || isNext ? 9 : 7, height: isEnd || isNext ? 9 : 7)
+            }
+            .frame(width: 14, height: 22)
+
+            Text(StationCatalog.station(id: stop.stationID)?.name ?? stop.stationID)
+                .font(.subheadline.weight(isEnd || isNext ? .semibold : .regular))
+                .foregroundStyle(isNext ? AnyShapeStyle(.green) : AnyShapeStyle(.primary))
+            Spacer()
+            Text(Format.time((stop.stationID == destinationID ? stop.arrival : stop.departure).addingTimeInterval(delay)))
+                .font(.subheadline)
+                .monospacedDigit()
+        }
+        .foregroundStyle(passed ? .secondary : .primary)
+        .opacity(passed ? 0.6 : 1)
+        .transition(.opacity)
+    }
+
+    /// A dashed stretch of rail: "5 stops".
+    private func gapRow(count: Int) -> some View {
+        HStack(spacing: 10) {
+            Rectangle()
+                .fill(Color.secondary.opacity(0.3))
+                .frame(width: 2, height: 22)
+                .mask {
+                    VStack(spacing: 3) {
+                        ForEach(0..<5, id: \.self) { _ in Rectangle().frame(height: 2) }
+                    }
+                }
+                .frame(width: 14)
+            HStack(spacing: 4) {
+                Text(count == 1 ? "1 stop" : "\(count) stops")
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.bold))
+            }
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(.tint)
+        }
+        .transition(.opacity)
     }
 }
 
@@ -895,11 +1173,12 @@ private struct TrainRow: View {
     /// The rider is on their way to, or already on, this train.
     let isTaking: Bool
     let isElsewhere: Bool
+    var isOtherDay = false
     let showsCountdown: Bool
 
     var body: some View {
         let urgency: Urgency = isTaking ? .relaxed : isElsewhere ? .neutral : Urgency(attempts: plan.attempts(for: train), now: now)
-        let isPast = (status == .departed || status == .tooLate) && !isTaking
+        let isPast = (status == .departed || status == .tooLate) && !isTaking && !isOtherDay
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(Format.time(train.departureTime))
@@ -959,6 +1238,8 @@ private struct TrainRow: View {
         switch status {
         case .cancelled:
             Text("Cancelled").foregroundStyle(.red)
+        case .departed where isOtherDay:
+            EmptyView()
         case .departed:
             if isTaking {
                 Text("On board").foregroundStyle(urgency.color)

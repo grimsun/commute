@@ -176,6 +176,46 @@ final class DepartureLogTests: XCTestCase {
         XCTAssertEqual(today, [morning])
         XCTAssertTrue(tomorrow.isEmpty)
     }
+
+    func testRemembersTheTrainAndCanUndo() async {
+        let suite = "commute.tests.\(UUID().uuidString)"
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        let log = DepartureLog(suiteName: suite)
+        let morning = CommuteKey(day: 20261019, direction: .homeToWork)
+        let evening = CommuteKey(day: 20261019, direction: .workToHome)
+
+        await log.markDeparted(morning, trainNumber: "510")
+        await log.markDeparted(evening)
+        var trains = await log.trainNumbers(since: 20261019)
+        XCTAssertEqual(trains, [morning: "510"])
+
+        await log.clear(morning)
+        let departed = await log.departed(since: 20261019)
+        trains = await log.trainNumbers(since: 20261019)
+        XCTAssertEqual(departed, [evening])
+        XCTAssertTrue(trains.isEmpty)
+    }
+
+    func testEndedTripsAreRememberedUntilTakenAgain() async {
+        let suite = "commute.tests.\(UUID().uuidString)"
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        let log = DepartureLog(suiteName: suite)
+        let morning = CommuteKey(day: 20261019, direction: .homeToWork)
+
+        await log.markDeparted(morning, trainNumber: "510")
+        await log.markEnded(morning)
+        var departed = await log.departed(since: 20261019)
+        var ended = await log.ended(since: 20261019)
+        XCTAssertTrue(departed.isEmpty)
+        XCTAssertEqual(ended, [morning])
+
+        // Taking a train again starts the trip again.
+        await log.markDeparted(morning, trainNumber: "114")
+        departed = await log.departed(since: 20261019)
+        ended = await log.ended(since: 20261019)
+        XCTAssertEqual(departed, [morning])
+        XCTAssertTrue(ended.isEmpty)
+    }
 }
 
 struct RecordingAlertScheduler: LeaveAlertScheduler {

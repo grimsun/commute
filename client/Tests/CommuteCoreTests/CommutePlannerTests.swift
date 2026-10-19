@@ -54,6 +54,21 @@ final class CommutePlannerTests: XCTestCase {
         XCTAssertEqual(plan.train?.fallback?.trainNumber, "105")
     }
 
+    func testEnRouteKeepsTrainsTheRiderCouldStillBeOn() async throws {
+        // Each ride is 45 min; the work end is 15 min from its station.
+        let trains = [
+            train("101", departs: at(8, 0)),  // door by 9:00
+            train("103", departs: at(8, 20)),
+            train("105", departs: at(8, 30)),
+            train("107", departs: at(8, 40)),
+            train("109", departs: at(9, 10))
+        ]
+        let plan = try await planner(trains).plan(profile: profile(), direction: .homeToWork, now: at(8, 55))
+
+        XCTAssertEqual(plan.upcoming.map(\.trainNumber), ["105", "107", "109"], "only two departed rows")
+        XCTAssertEqual(plan.enRoute.map(\.trainNumber), ["101", "103", "105", "107"], "101 arrived at 8:45 but the rider may still be on the last leg")
+    }
+
     func testAttemptTimesUseAccessTimeAndBuffers() async throws {
         let target = train("103", departs: at(8, 20))
         let plan = try await planner([target]).plan(profile: profile(), direction: .homeToWork, now: at(7, 0))
