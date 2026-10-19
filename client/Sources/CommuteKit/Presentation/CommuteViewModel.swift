@@ -35,7 +35,6 @@ public final class CommuteViewModel {
     private var paths: [PlanKey: TrainPath] = [:]
     public var trainPath: TrainPath? { paths[currentKey] }
     private var currentKey: PlanKey { mode == .schedule ? .schedule : .commute(direction) }
-    public private(set) var isRefreshing = false
     /// Set for `missedDisplay` when a refresh moves past a train that just became too late.
     public private(set) var missedTrain: MissedTrain?
     static let missedDisplay: TimeInterval = 10
@@ -199,13 +198,6 @@ public final class CommuteViewModel {
         // Later requests win; an older response that lands late is dropped.
         refreshGeneration += 1
         let generation = refreshGeneration
-        isRefreshing = true
-        defer {
-            if generation == refreshGeneration {
-                isRefreshing = false
-            }
-        }
-
         do {
             var newPlans = try await computePlans(at: date)
             // Live delays only around a trip, and only as often as the feed allows; then re-plan with them.
@@ -579,11 +571,6 @@ public final class CommuteViewModel {
     }
 
     // MARK: Alerts
-
-    /// Whether the app itself shows leave alerts in the current mode.
-    public var alertsOnDevice: Bool {
-        services.alerts.schedulesOnDevice
-    }
 
     /// The trip on screen; late at night that is tomorrow morning's.
     private var currentCommute: CommuteKey {

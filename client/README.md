@@ -17,7 +17,7 @@ The mode decides only two implementations, bundled in `CommuteServices` and buil
 
 | Abstraction | Standalone | Server |
 |---|---|---|
-| `TransitProvider` | `TimetableTransitProvider` | `FallbackTransitProvider(ServerTransitProvider → TimetableTransitProvider)` |
+| `TransitProvider` | `LiveTimetableTransitProvider` (timetable + `CaltrainLiveFeed` delays) | `FallbackTransitProvider(ServerTransitProvider → TimetableTransitProvider)` |
 | `LeaveAlertScheduler` | `LocalLeaveAlertScheduler` | `NoopLeaveAlertScheduler` (the server pushes) |
 
 Everything else (planner, alert planning, UI, settings) is shared. `StandardServiceFactory` is the
@@ -28,14 +28,14 @@ services when the data source changes.
 
 - `Sources/CommuteCore/`: Foundation-only, tested on macOS
   - `Models/`: stations (Caltrain GTFS ids), train types, profile, data-source settings, plan
-  - `Planning/`: `DefaultPlanner` (train + get ready / leave / too late), `LeaveAlertPlanner`
+  - `Planning/`: `DefaultPlanner` (train + get ready / leave / too late), `CommuteWindow` (which trip and mode is current), `TripRecord` (trips under way, their train, when they're over), `DepartureDetection`, `LeaveAlertPlanner`
   - `Timetable/`: ZIP reader, CSV and GTFS parsing, `Timetable` queries, `TimetableStore` (memory + disk cache, download on first use)
   - `Providers/`: provider protocols, timetable / server / fallback providers, `CommuteServices` factory, fixed and sample providers for tests and previews
-  - `Storage/`: profile persistence, departed-commute log
+  - `Storage/`: profile persistence, the trip log behind `TripRecord`
 - `Sources/CommuteKit/`: Apple-platform layer, re-exports `CommuteCore`
   - `MapKit/`: car ETAs and travel-time estimates from Apple Maps
   - `Notifications/`: local leave alerts
-  - `Presentation/`: map with a bottom-sheet plan, settings, address search
+  - `Presentation/`: `CommuteViewModel`, the map, the bottom sheet (`PlanPanel` with `HeroCard`, `UpcomingTrainsCard`, `StopList`, `CarCard`), settings, address search
 - `Tests/CommuteCoreTests/`: planner, timetable (with a miniature GTFS fixture), services, alerts
 - `CommuteApp/`: the Xcode app target; `CommuteAppApp.swift` wires the implementations
 - `CommuteApp/CommuteWidgets/`: widget extension with the Lock Screen / Dynamic Island Live Activity
@@ -70,6 +70,28 @@ services when the data source changes.
   departed: the card shows "You're on your way" / "You're on the train" and that trip's alerts stop.
   Without access, nothing changes.
 - Door arrival = train arrival + minutes from the destination platform.
+
+## Card states
+
+The next-train card in Commute mode, for a trip leaving home at 8:00 on the 8:20 (16 min to the
+station, 3 min buffer, 20 min prep). The same applies to the evening trip from work.
+
+| State | When | Card |
+|---|---|---|
+| On track (green) | before get ready | "Leave in 31 min · by 8:01 AM" |
+| Get ready (amber) | from leave − prep (7:41) | same line, amber |
+| Leave soon / Leave now (red) | from 3 min before leaving (7:58) / at leave time (8:01) | then "Too late in 2 min · at 8:04 AM" |
+| Missed it! (red) | for 10 s once too late (8:04) | "Next: Local 114 at 8:25 AM", then the plan moves to that train |
+| You're on your way | trip marked (On my way, a row, or location) before the train leaves | "Train in 14 min · departs 8:20 AM", End trip |
+| You're on the train | from departure | next stop line, "Arrives in 19 min", the map arrow moves |
+| Your stop is next | one stop before | plus a notification a few minutes before arriving |
+| Almost there | from the train's arrival | "At work in 10 min · 9:09 AM" |
+| Next trip | from door arrival | the evening trip home, back at On track |
+| Next train (blue) | away from home or work with no trip under way, e.g. after End trip | "Departs in 4 min", On this train |
+
+Schedule mode shows "Next train · Departs in…" for the chosen stations, with the train after it.
+`-debugNow <ISO 8601>`, `-debugTrip <number|none|ended>` and `-debugPanel compact|expanded` launch
+options reproduce each state in the simulator.
 
 ## Run
 
