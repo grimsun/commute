@@ -30,4 +30,20 @@ public enum CommuteWindow {
         let toHome = targetLeave(for: .workToHome, profile: profile, now: now, calendar: calendar)
         return toWork <= toHome ? .homeToWork : .workToHome
     }
+
+    /// How long before a target leave time commute mode takes over from schedule mode.
+    public static let commuteLead: TimeInterval = 2 * 3600
+
+    /// Commute mode fits from two hours before a target leave time until its four-hour window ends,
+    /// on commute days that aren't holidays; any other time the app opens in schedule mode.
+    public static func isCommuteTime(profile: CommuteProfile, now: Date, isHoliday: Bool = false, calendar: Calendar = .caltrain) -> Bool {
+        guard !isHoliday else { return false }
+        return Direction.allCases.contains { direction in
+            let target = targetLeave(for: direction, profile: profile, now: now, calendar: calendar)
+            let weekday = calendar.component(.weekday, from: target)
+            return profile.commuteDays.contains(weekday)
+                && now >= target.addingTimeInterval(-commuteLead)
+                && now < target.addingTimeInterval(rolloverInterval)
+        }
+    }
 }

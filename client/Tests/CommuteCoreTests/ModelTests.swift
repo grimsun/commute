@@ -31,6 +31,7 @@ final class ModelTests: XCTestCase {
         profile.dataSource = DataSourceSettings(mode: .server, serverURL: "https://commute.example.com")
         profile.commuteDays = [2, 4]
         profile.eveningTargetLeave = TimeOfDay(hour: 18, minute: 5)
+        profile.scheduleRoute = StationRoute(originStationID: "hillsdale", destinationStationID: "san_jose_diridon")
         let data = try JSONEncoder().encode(profile)
         XCTAssertEqual(try JSONDecoder().decode(CommuteProfile.self, from: data), profile)
     }
@@ -58,6 +59,30 @@ final class ModelTests: XCTestCase {
 
         XCTAssertEqual(CommuteWindow.targetLeave(for: .homeToWork, profile: profile, now: at(19, 11), calendar: calendar), at(19, 8))
         XCTAssertEqual(CommuteWindow.targetLeave(for: .homeToWork, profile: profile, now: at(19, 13), calendar: calendar), at(20, 8))
+    }
+
+    func testCommuteModeOnlyAroundTargetsOnCommuteDays() {
+        let calendar = Calendar.caltrain
+        func at(_ day: Int, _ hour: Int, _ minute: Int = 0) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: hour, minute: minute))!
+        }
+        let profile = CommuteProfile.default // 8:00 and 17:30, Monday to Friday
+        func isCommute(_ date: Date, holiday: Bool = false) -> Bool {
+            CommuteWindow.isCommuteTime(profile: profile, now: date, isHoliday: holiday, calendar: calendar)
+        }
+
+        // Monday, October 19.
+        XCTAssertFalse(isCommute(at(19, 5, 59)), "more than two hours before 8:00")
+        XCTAssertTrue(isCommute(at(19, 6)))
+        XCTAssertTrue(isCommute(at(19, 11, 59)))
+        XCTAssertFalse(isCommute(at(19, 13)), "midday gap")
+        XCTAssertTrue(isCommute(at(19, 15, 30)))
+        XCTAssertTrue(isCommute(at(19, 21, 29)))
+        XCTAssertFalse(isCommute(at(19, 22)))
+        XCTAssertFalse(isCommute(at(19, 8), holiday: true))
+        // Saturday and Sunday.
+        XCTAssertFalse(isCommute(at(24, 8)))
+        XCTAssertFalse(isCommute(at(25, 17, 30)))
     }
 
     func testLateEveningWindowContinuesAcrossMidnight() {

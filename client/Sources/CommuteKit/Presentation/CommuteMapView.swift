@@ -4,7 +4,8 @@ import SwiftUI
 /// Map behind the sheet: home, work, both stations, the access legs and the rail segment.
 struct CommuteMapView: View {
     let profile: CommuteProfile
-    let isTemporaryRoute: Bool
+    /// Station to station: no home, work or legs to them.
+    let isSchedule: Bool
     /// Height covered by the sheet, so the route is framed in the visible part.
     let bottomInset: CGFloat
     /// Changes when the route should be re-framed, e.g. after the rider panned away and tapped refresh.
@@ -102,7 +103,7 @@ struct CommuteMapView: View {
         ]
         for end in ends {
             guard let station = end.station else { continue }
-            if isTemporaryRoute || end.place == nil {
+            if isSchedule || end.place == nil {
                 pins.append(Pin(id: station.id, title: station.name, coordinate: station.coordinate, symbol: "tram.fill", color: .red))
             } else if let place = end.place, place.distance(to: station.coordinate) < Self.mergeDistance {
                 pins.append(Pin(id: end.name, title: "\(end.name) · \(station.name)", coordinate: station.coordinate, symbol: end.symbol, color: end.color))
@@ -129,7 +130,7 @@ struct CommuteMapView: View {
     }
 
     private var accessLegs: [[CLLocationCoordinate2D]] {
-        if isTemporaryRoute { return [] }
+        if isSchedule { return [] }
         return [
             (profile.home.coordinate, homeStation?.coordinate),
             (profile.work.coordinate, workStation?.coordinate)

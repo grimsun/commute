@@ -5,16 +5,14 @@ import SwiftUI
 struct PlanPanel: View {
     let viewModel: CommuteViewModel
     let isExpanded: Bool
+    let onOpenSettings: () -> Void
     /// Reports the height of the collapsed content so the sheet can fit it exactly.
     let onCollapsedHeightChange: (CGFloat) -> Void
     /// Called after the rider sets a train as target, e.g. to collapse the sheet onto it.
     let onPickTrain: () -> Void
 
-    @State private var isRoutePickerPresented = false
     /// While the list scrolls, the clock tick pauses so scrolling stays smooth.
     @State private var isScrolling = false
-    @State private var draftOriginStationID = ""
-    @State private var draftDestinationStationID = ""
 
     private static let topID = "top"
     /// How often the card re-evaluates countdowns, colors and row states between refreshes.
@@ -33,7 +31,7 @@ struct PlanPanel: View {
         let scheduleDetail = viewModel.scheduleDay?.label
         let errorMessage = viewModel.errorMessage
         let isDownloading = viewModel.timetableInfo == nil
-        let isTemporaryRoute = viewModel.temporaryRoute != nil
+        let isSchedule = viewModel.mode == .schedule
         return ScrollViewReader { scroller in
             ScrollView {
                 SwiftUI.TimelineView(.periodic(from: .now, by: isScrolling ? 3600 : Self.tick)) { _ in
@@ -46,7 +44,7 @@ struct PlanPanel: View {
                         VStack(spacing: 12) {
                             header
                             if let plan {
-                                HeroCard(plan: plan, profile: routeProfile, now: now, tripInProgress: tripInProgress, isTemporaryRoute: isTemporaryRoute, elsewhereTrain: tripInProgress == nil ? elsewhereTrain : nil, path: trainPath, showsStops: isExpanded, scheduleLabel: scheduleLabel) { train in
+                                HeroCard(plan: plan, profile: routeProfile, now: now, tripInProgress: tripInProgress, isSchedule: isSchedule, elsewhereTrain: tripInProgress == nil ? elsewhereTrain : nil, path: trainPath, showsStops: isExpanded, scheduleLabel: scheduleLabel) { train in
                                     Task { await viewModel.pick(train) }
                                 }
                             } else {
@@ -72,7 +70,7 @@ struct PlanPanel: View {
                                 now: now,
                                 highlightedID: tripInProgress?.id ?? elsewhereTrain?.id ?? plan.train?.train.id,
                                 isTripInProgress: tripInProgress != nil,
-                                isElsewhere: tripInProgress == nil && elsewhereTrain != nil,
+                                isElsewhere: isSchedule || (tripInProgress == nil && elsewhereTrain != nil),
                                 scheduleLabel: scheduleDetail,
                                 onPick: { train in
                                     Task { await viewModel.pick(train) }
@@ -83,8 +81,8 @@ struct PlanPanel: View {
                                 },
                                 loadPath: { train in await viewModel.path(for: train) }
                             )
-                            // Driving is moot once you're on your way.
-                            if tripInProgress == nil {
+                            // Driving is moot once you're on your way, and between two stations.
+                            if tripInProgress == nil && !isSchedule {
                                 CarCard(plan: plan, now: now)
                             }
                             footer(plan: plan)
@@ -109,15 +107,12 @@ struct PlanPanel: View {
                 }
             }
         }
-        .sheet(isPresented: $isRoutePickerPresented) {
-            routePicker
-        }
     }
 
     // MARK: Header
 
-    /// A flip button and the stations; expanded adds a context line. Not tappable as a whole,
-    /// since this is where people grab the sheet. Long-press for a one-off station pair.
+    /// A flip button, the stations and settings; not tappable as a whole, since this is where
+    /// people grab the sheet. Schedule mode makes each station a menu of all stations.
     private var header: some View {
         HStack(spacing: 10) {
             Button {
@@ -130,36 +125,23 @@ struct PlanPanel: View {
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Switch direction")
-            .accessibilityValue(viewModel.direction.title)
+            .accessibilityLabel(viewModel.mode == .schedule ? "Swap stations" : "Switch direction")
+            .accessibilityValue(viewModel.mode == .schedule ? "" : viewModel.direction.title)
 
-            // "San Francisco → Palo Alto · To work" on one line; scales down rather than wrapping.
-            (Text(routeTitle).font(.headline)
-                + Text(" · \(viewModel.temporaryRoute == nil ? viewModel.direction.title : "One-off")")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .contextMenu {
-                Button {
-                    openRoutePicker()
-                } label: {
-                    Label("Other stations…", systemImage: "mappin.and.ellipse")
-                }
-                if viewModel.temporaryRoute != nil {
-                    Button {
-                        Task { await viewModel.clearTemporaryRoute() }
-                    } label: {
-                        Label("Back to my commute", systemImage: "arrow.uturn.backward")
-                    }
+            Group {
+                if viewModel.mode == .schedule {
+                    scheduleStations
+                } else {
+                    // "San Francisco → Palo Alto · To work" on one line; scales down rather than wrapping.
+                    (Text(routeTitle).font(.headline)
+                        + Text(" · \(viewModel.direction.title)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                 }
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityActions {
-                Button("Other stations…", action: openRoutePicker)
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if let notice = viewModel.plan?.transitNotice {
                 // Full text is in the expanded sheet; collapsed, a marker keeps the size fixed.
@@ -167,21 +149,70 @@ struct PlanPanel: View {
                     .foregroundStyle(.orange)
                     .accessibilityLabel(notice)
             }
+
+            Button(action: onOpenSettings) {
+                Image(systemName: "gearshape.fill")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!viewModel.isLoaded)
+            .accessibilityLabel("Settings")
         }
     }
 
     private var routeTitle: String {
-        let profile = viewModel.routeProfile
-        let from = StationCatalog.station(id: profile.originStationID(for: viewModel.direction))?.name ?? "?"
-        let to = StationCatalog.station(id: profile.destinationStationID(for: viewModel.direction))?.name ?? "?"
+        let route = viewModel.route
+        let from = StationCatalog.station(id: route.originStationID)?.name ?? "?"
+        let to = StationCatalog.station(id: route.destinationStationID)?.name ?? "?"
         return "\(from) → \(to)"
     }
 
-    private func openRoutePicker() {
-        let profile = viewModel.routeProfile
-        draftOriginStationID = profile.originStationID(for: viewModel.direction)
-        draftDestinationStationID = profile.destinationStationID(for: viewModel.direction)
-        isRoutePickerPresented = true
+    /// "Palo Alto ⌄ → San Francisco ⌄": each name picks any station.
+    private var scheduleStations: some View {
+        let route = viewModel.scheduleRoute
+        return HStack(spacing: 6) {
+            stationMenu(route.originStationID, label: "From") { id in
+                // Picking the other end's station swaps the two.
+                id == route.destinationStationID ? route.reversed : StationRoute(originStationID: id, destinationStationID: route.destinationStationID)
+            }
+            Image(systemName: "arrow.right")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.tertiary)
+            stationMenu(route.destinationStationID, label: "To") { id in
+                id == route.originStationID ? route.reversed : StationRoute(originStationID: route.originStationID, destinationStationID: id)
+            }
+        }
+    }
+
+    private func stationMenu(_ selectedID: String, label: String, route: @escaping (String) -> StationRoute) -> some View {
+        Menu {
+            Picker(label, selection: Binding {
+                selectedID
+            } set: { id in
+                Task { await viewModel.setScheduleRoute(route(id)) }
+            }) {
+                ForEach(StationCatalog.all) { station in
+                    Text(station.name).tag(station.id)
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Text(StationCatalog.station(id: selectedID)?.name ?? "?")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.tint)
+            }
+            .contentShape(Rectangle())
+        }
+        .accessibilityLabel(label)
+        .accessibilityValue(StationCatalog.station(id: selectedID)?.name ?? "")
     }
 
     // MARK: Cards
@@ -193,7 +224,7 @@ struct PlanPanel: View {
             profile: viewModel.profile,
             now: Placeholder.now,
             tripInProgress: nil,
-            isTemporaryRoute: false,
+            isSchedule: false,
             reservesMissedLine: true
         )
         .redacted(reason: .placeholder)
@@ -231,65 +262,6 @@ struct PlanPanel: View {
         .foregroundStyle(.secondary)
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
-    }
-
-    // MARK: Route picker
-
-    private var routePicker: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    stationPicker("From", selection: $draftOriginStationID)
-                    stationPicker("To", selection: $draftDestinationStationID)
-                    if draftOriginStationID == draftDestinationStationID {
-                        Text("Choose two different stations.")
-                            .foregroundStyle(.red)
-                    }
-                } footer: {
-                    Text("Lasts until you close the app. Times start at the station, without travel to it.")
-                }
-                if viewModel.temporaryRoute != nil {
-                    Section {
-                        Button("Back to my commute") {
-                            isRoutePickerPresented = false
-                            Task { await viewModel.clearTemporaryRoute() }
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Other stations")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { isRoutePickerPresented = false }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Show trains") {
-                        isRoutePickerPresented = false
-                        Task {
-                            await viewModel.setTemporaryRoute(
-                                originStationID: draftOriginStationID,
-                                destinationStationID: draftDestinationStationID
-                            )
-                        }
-                    }
-                    .disabled(draftOriginStationID == draftDestinationStationID)
-                }
-            }
-        }
-    }
-
-    private func stationPicker(_ title: String, selection: Binding<String>) -> some View {
-        Picker(title, selection: selection) {
-            ForEach(StationCatalog.all) { station in
-                Text(station.name).tag(station.id)
-            }
-        }
-        #if os(iOS)
-        .pickerStyle(.navigationLink)
-        #endif
     }
 }
 
@@ -348,13 +320,16 @@ private struct HeroCard: View {
     /// The train the rider left for or is on (from location); replaces the planned train on the card.
     let tripInProgress: TrainDeparture?
     private var hasDeparted: Bool { tripInProgress != nil }
-    let isTemporaryRoute: Bool
+    /// Schedule mode: the next train between two stations, with no leave guidance.
+    let isSchedule: Bool
     /// The loading placeholder shows the "too late for…" line so the sheet is sized for it.
     var reservesMissedLine = false
     /// Sets a train as the target, from the "better train" hint.
     /// Away from the starting place and not travelling: show this next train without leave guidance.
     var elsewhereTrain: TrainDeparture? = nil
     private var isElsewhere: Bool { elsewhereTrain != nil }
+    /// Just the train: no countdown to leaving, since the rider's starting point is unknown.
+    private var isNeutral: Bool { isElsewhere || isSchedule }
     /// Stops and track of the card's train, when loaded.
     var path: TrainPath? = nil
     /// Expanded sheet: the card adds the train's stops.
@@ -375,7 +350,9 @@ private struct HeroCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("No train to plan for", systemImage: "tram.fill")
                         .font(.headline)
-                    Text("Nothing left that matches your target time and train types. Long-press a train in the list to pin it, or check Settings → Train types.")
+                    Text(isSchedule
+                         ? "No more trains between these stations for now. Check Settings → Train types."
+                         : "Nothing left that matches your target time and train types. Long-press a train in the list to pin it, or check Settings → Train types.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -386,7 +363,9 @@ private struct HeroCard: View {
     private func content(_ option: TrainOption) -> some View {
         let train = option.train
         // Once on the way, the leave countdown no longer applies; it is calm green until the train.
-        let urgency: Urgency = hasDeparted ? .relaxed : isElsewhere ? .neutral : Urgency(attempts: option.attempts, now: now)
+        let urgency: Urgency = hasDeparted ? .relaxed
+            : isNeutral ? (now >= option.train.departureTime ? .missed : .neutral)
+            : Urgency(attempts: option.attempts, now: now)
         return VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
                 ServiceBadge(service: train.service)
@@ -477,7 +456,14 @@ private struct HeroCard: View {
                     .accessibilityIdentifier("leave-countdown")
 
                 // The trip from home or work does not apply when starting from somewhere else.
-                if !isElsewhere {
+                if isSchedule {
+                    Text(followingLine(after: train))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .accessibilityIdentifier("following-train")
+                } else if !isElsewhere {
                     Text(journeyLine(train))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -504,8 +490,8 @@ private struct HeroCard: View {
 
     /// "You're on track", "Get ready", "Leave soon", "Leave now", or "Missed it" just before re-planning.
     private func statusTitle(_ option: TrainOption, urgency: Urgency) -> String {
-        if isTemporaryRoute {
-            return urgency == .missed ? "Departed" : "Train in \(Format.countdown(to: option.train.departureTime, from: now))"
+        if isSchedule {
+            return urgency == .missed ? "Departed" : "Next train"
         }
         if hasDeparted {
             return now < option.train.departureTime ? "You’re on your way" : "You’re on the train"
@@ -527,10 +513,10 @@ private struct HeroCard: View {
         let attempts = option.attempts
         let colored = { (text: String) in Text(text).foregroundStyle(urgency.color) }
         let detail = { (text: String) in Text(text).foregroundStyle(.secondary) }
-        if isTemporaryRoute {
-            return detail("Departs \(Format.time(option.train.departureTime)) · \(Format.minutes(plan.safetyBuffer)) buffer")
+        if isSchedule && urgency == .missed {
+            return detail("Finding the next train…")
         }
-        if isElsewhere {
+        if isNeutral {
             return Text("Departs in ") + colored(Format.countdown(to: option.train.departureTime, from: now)) + detail(" · \(Format.time(option.train.departureTime))")
         }
         if hasDeparted {
@@ -552,9 +538,6 @@ private struct HeroCard: View {
     /// "10 min by 🚲 to 🚆 · 3 min buffer · 🏢 at 9:26 AM"
     private func journeyLine(_ train: TrainDeparture) -> String {
         let arrival = "\(destinationEmoji) at \(Format.time(plan.doorArrival(for: train)))"
-        if isTemporaryRoute {
-            return "🚆 to \(plan.destinationStation.name) · \(arrival)"
-        }
         if hasDeparted && now >= train.departureTime {
             // On board: the line above names the station; only the last leg remains.
             let mode = profile.accessMode == .bike ? "🚲" : "🚶"
@@ -569,8 +552,17 @@ private struct HeroCard: View {
         return parts.joined(separator: " · ")
     }
 
+    /// Schedule mode: "Then 5:42 PM · Local 147", the train after this one.
+    private func followingLine(after train: TrainDeparture) -> String {
+        guard let next = plan.upcoming.first(where: {
+            !$0.isCancelled && profile.preferredServices.contains($0.service) && $0.departureTime > train.departureTime
+        }) else {
+            return "Last train for now"
+        }
+        return "Then \(Format.time(next.departureTime)) · \(next.service.displayName) \(next.trainNumber)"
+    }
+
     private var destinationEmoji: String {
-        if isTemporaryRoute { return "📍" }
         return plan.direction == .homeToWork ? "🏢" : "🏠"
     }
 
@@ -596,7 +588,7 @@ private struct HeroCard: View {
 
     /// An express overtaking the planned train, say; never while travelling or on the placeholder.
     private func betterTrain(than option: TrainOption) -> TrainDeparture? {
-        guard !isTemporaryRoute, !hasDeparted, !isElsewhere, !reservesMissedLine else { return nil }
+        guard !isNeutral, !hasDeparted, !reservesMissedLine else { return nil }
         return plan.betterTrain(than: option.train, preferred: profile.preferredServices)
     }
 
@@ -610,7 +602,7 @@ private struct HeroCard: View {
         if reservesMissedLine {
             return "Too late for the 0:00 AM train"
         }
-        guard !isTemporaryRoute, !option.isManual, !hasDeparted, !isElsewhere else { return nil }
+        guard !isNeutral, !option.isManual, !hasDeparted else { return nil }
         // Only trains that were the target (or a later replacement), never ones before the target time.
         let missed = plan.upcoming.last {
             !$0.isCancelled && profile.preferredServices.contains($0.service)

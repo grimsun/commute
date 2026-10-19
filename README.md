@@ -38,6 +38,7 @@ Commute works backwards from the train, using how long *you* take to get to the 
 - **Alerts.** "Get ready" and "Leave now" notifications, even with the app closed. With location access, the app notices you've left and the rest of the trip stays quiet; on the way it shows when your train leaves, on board when it arrives, and a heads-up comes just before your stop.
 - **Lock Screen countdown.** A Live Activity counts down to leaving, to the train, then to arrival, in the Dynamic Island too.
 - **Your call.** Long-press any train in the list to pin it instead; tap it to see its stops. When an express would get you there sooner without leaving earlier, the card says so.
+- **Commute or schedule.** On commute days around your target times the app plans your trip; on weekends, holidays and in between it opens as a plain timetable between any two stations. One tap switches.
 - **Delays and cancellations.** Predicted times replace the timetable; a cancelled target train hands over to the next one. The card says which schedule runs today: weekday, weekend or holiday.
 
 ## Features

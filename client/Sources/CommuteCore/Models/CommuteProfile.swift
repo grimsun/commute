@@ -41,6 +41,9 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
     /// Show the trip countdown on the Lock Screen and in the Dynamic Island.
     public var liveActivityEnabled: Bool
 
+    /// The last stations looked up in schedule mode; `nil` starts from the commute stations.
+    public var scheduleRoute: StationRoute?
+
     public init(
         home: Place,
         work: Place,
@@ -59,7 +62,8 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         carGoodDeltaMinutes: Int = 10,
         leaveAlertsEnabled: Bool = false,
         dataSource: DataSourceSettings = DataSourceSettings(),
-        liveActivityEnabled: Bool = true
+        liveActivityEnabled: Bool = true,
+        scheduleRoute: StationRoute? = nil
     ) {
         self.home = home
         self.work = work
@@ -79,6 +83,7 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         self.leaveAlertsEnabled = leaveAlertsEnabled
         self.dataSource = dataSource
         self.liveActivityEnabled = liveActivityEnabled
+        self.scheduleRoute = scheduleRoute
     }
 
     public static let `default` = CommuteProfile(
@@ -122,7 +127,7 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case home, work, homeStationID, workStationID, accessMode, bikeSpeedKph, homeStationMinutes, workStationMinutes
         case stationSafetyBufferMinutes, prepLeadTimeMinutes, morningTargetLeave, eveningTargetLeave, commuteDays
-        case preferredServices, carGoodDeltaMinutes, leaveAlertsEnabled, dataSource, liveActivityEnabled
+        case preferredServices, carGoodDeltaMinutes, leaveAlertsEnabled, dataSource, liveActivityEnabled, scheduleRoute
     }
 
     public init(from decoder: Decoder) throws {
@@ -146,5 +151,6 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         leaveAlertsEnabled = try c.decodeIfPresent(Bool.self, forKey: .leaveAlertsEnabled) ?? d.leaveAlertsEnabled
         dataSource = try c.decodeIfPresent(DataSourceSettings.self, forKey: .dataSource) ?? d.dataSource
         liveActivityEnabled = try c.decodeIfPresent(Bool.self, forKey: .liveActivityEnabled) ?? d.liveActivityEnabled
+        scheduleRoute = try c.decodeIfPresent(StationRoute.self, forKey: .scheduleRoute)
     }
 }

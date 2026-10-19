@@ -41,7 +41,7 @@ public struct DashboardView: View {
     public var body: some View {
         CommuteMapView(
             profile: viewModel.routeProfile,
-            isTemporaryRoute: viewModel.temporaryRoute != nil,
+            isSchedule: viewModel.mode == .schedule,
             bottomInset: collapsedHeight,
             recenterRequest: recenterRequest,
             trainPath: viewModel.trainPath,
@@ -53,14 +53,16 @@ public struct DashboardView: View {
         .ignoresSafeArea()
         .overlay(alignment: .top) {
             // A separate view, so refresh progress redraws only the buttons, not the map.
-            MapControls(viewModel: viewModel, isSettingsPresented: $isSettingsPresented) {
+            MapControls(viewModel: viewModel) {
                 recenterRequest += 1
             }
             .padding(.horizontal, 16)
             .padding(.top, 4)
         }
         .sheet(isPresented: .constant(true)) {
-            PlanPanel(viewModel: viewModel, isExpanded: isExpanded, onCollapsedHeightChange: { contentHeight in
+            PlanPanel(viewModel: viewModel, isExpanded: isExpanded, onOpenSettings: {
+                isSettingsPresented = true
+            }, onCollapsedHeightChange: { contentHeight in
                 // Expanded-only header text must not increase the collapsed detent.
                 guard !isExpanded else { return }
                 // Content plus the sheet's top grabber area and a little breathing room.
@@ -111,16 +113,15 @@ public struct DashboardView: View {
                 if previous == .background {
                     isExpanded = false
                 }
-                Task { await viewModel.becameActive() }
+                Task { await viewModel.becameActive(fromBackground: previous == .background) }
             }
         }
     }
 }
 
-/// Settings (left) and refresh (right) over the map.
+/// The commute / schedule switch (left) and refresh (right) over the map.
 private struct MapControls: View {
     let viewModel: CommuteViewModel
-    @Binding var isSettingsPresented: Bool
     let onRefresh: () -> Void
 
     @State private var spin = 0.0
@@ -128,13 +129,17 @@ private struct MapControls: View {
     var body: some View {
         HStack {
             Button {
-                isSettingsPresented = true
+                onRefresh()
+                Task { await viewModel.toggleMode() }
             } label: {
-                label(Image(systemName: "gearshape.fill"))
+                ModeSwitch(mode: viewModel.mode)
             }
             .buttonStyle(.plain)
             .disabled(!viewModel.isLoaded)
-            .accessibilityLabel("Settings")
+            .accessibilityLabel("Mode")
+            .accessibilityValue(viewModel.mode.title)
+            .accessibilityHint("Switches to \(viewModel.mode.other.title.lowercased())")
+            .accessibilityIdentifier("mode-switch")
 
             Spacer()
 
@@ -161,6 +166,43 @@ private struct MapControls: View {
             .frame(width: 44, height: 44)
             .background(.regularMaterial, in: Circle())
             .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
+    }
+}
+
+/// Both modes side by side, the current one highlighted, so it reads as a switch.
+private struct ModeSwitch: View {
+    let mode: AppMode
+
+    var body: some View {
+        HStack(spacing: 2) {
+            segment(.commute, symbol: "briefcase.fill")
+            segment(.schedule, symbol: "calendar")
+        }
+        .padding(3)
+        .frame(height: 44)
+        .background(.regularMaterial, in: Capsule())
+        .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
+    }
+
+    private func segment(_ segment: AppMode, symbol: String) -> some View {
+        let isSelected = segment == mode
+        return HStack(spacing: 5) {
+            Image(systemName: symbol)
+            if isSelected {
+                Text(segment.title)
+                    .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .leading)))
+            }
+        }
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+        .padding(.horizontal, isSelected ? 12 : 10)
+        .frame(maxHeight: .infinity)
+        .background {
+            if isSelected {
+                Capsule().fill(.tint)
+            }
+        }
+        .contentShape(Capsule())
     }
 }
 

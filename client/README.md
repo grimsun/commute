@@ -51,10 +51,13 @@ services when the data source changes.
   to follow it for this trip. Touch and hold the selected train and choose **Unpin**
   to clear the override.
   A manual target expires when it can no longer be caught or its commute window ends.
-- Touch and hold the station names above the card and choose **Other stations…** for a one-off
-  station-to-station route. The map and trains follow those stations, with zero home/work access time
-  and the usual platform buffer. **Back to my commute** returns to the saved route. Temporary stations
-  and train picks are cleared when the app closes; commute alert settings stay tied to the saved route.
+- Two modes, switched with the control at the top left. **Commute** plans leaving home and work as above.
+  **Schedule** shows the next trains between any two stations (tap either station name to change it,
+  ⇆ swaps them), with no travel time or buffer; the stations are remembered. The app opens in Commute
+  from two hours before a target leave time until its four-hour window ends, on commute days that
+  aren't holidays, and in Schedule otherwise. A switch by hand lasts until that changes or the app
+  returns from the background. Alerts, location tracking and the Lock Screen countdown follow the
+  commute in either mode. Settings is the gear in the sheet header.
 - Automatic selection rolls forward for four hours after the target leave time, then moves to
   the next commute. Late evening windows continue across midnight. Tomorrow’s trains are labeled.
 - With location access (while using the app), leaving the starting place during a trip marks it as
