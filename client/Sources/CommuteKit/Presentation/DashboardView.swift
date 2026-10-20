@@ -52,16 +52,21 @@ public struct DashboardView: View {
         .height(min(compactHeight, collapsedHeight - 40))
     }
 
+    /// Full height, short of the map's top controls, so the mode switch stays in reach.
+    private var expandedDetent: PresentationDetent {
+        .custom(BelowMapControls.self)
+    }
+
     /// Maps the positions onto detents; heights can change without losing the position.
     private var detentSelection: Binding<PresentationDetent> {
         Binding {
             switch panel {
             case .compact: compactDetent
             case .collapsed: collapsedDetent
-            case .expanded: .large
+            case .expanded: expandedDetent
             }
         } set: { detent in
-            panel = detent == .large ? .expanded : detent == compactDetent ? .compact : .collapsed
+            panel = detent == expandedDetent ? .expanded : detent == compactDetent ? .compact : .collapsed
         }
     }
 
@@ -117,9 +122,10 @@ public struct DashboardView: View {
                 // Show the picked train in the next-train card.
                 panel = .collapsed
             })
-            .presentationDetents(allowsCompact ? [compactDetent, collapsedDetent, .large] : [collapsedDetent, .large], selection: detentSelection)
+            .presentationDetents(allowsCompact ? [compactDetent, collapsedDetent, expandedDetent] : [collapsedDetent, expandedDetent], selection: detentSelection)
             .presentationContentInteraction(.resizes)
-            .presentationBackgroundInteraction(.enabled(upThrough: collapsedDetent))
+            // The map's controls stay usable with the sheet open.
+            .presentationBackgroundInteraction(.enabled)
             .presentationDragIndicator(.visible)
             .presentationBackground(Palette.panel)
             .interactiveDismissDisabled()
@@ -152,6 +158,13 @@ public struct DashboardView: View {
                 Task { await viewModel.becameActive(fromBackground: previous == .background) }
             }
         }
+    }
+}
+
+/// The large detent less the height of the map's top controls.
+private struct BelowMapControls: CustomPresentationDetent {
+    static func height(in context: Context) -> CGFloat? {
+        context.maxDetentValue - 56
     }
 }
 
