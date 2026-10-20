@@ -28,15 +28,15 @@ struct StopList: View {
     var body: some View {
         let stops = path.stops(from: originID, to: destinationID)
         let position = path.position(at: now, delay: delay)
-        // Highlighted only once the train is moving toward the rider's stops.
-        let next = position == nil ? nil : path.nextStop(at: now, delay: delay)
-        let current = stops.firstIndex { $0.stationID == (position?.stationID ?? next?.stationID) }
+        // Highlighted only while the train runs: the station it's at, else the one it's heading to.
+        let currentID = position.flatMap { $0.stationID ?? path.nextStop(at: now, delay: delay)?.stationID }
+        let current = stops.firstIndex { $0.stationID == currentID }
         let items = items(count: stops.count, current: current)
         VStack(alignment: .leading, spacing: 0) {
             ForEach(items) { item in
                 switch item {
                 case .stop(let index):
-                    stopRow(stops[index], isFirst: index == 0, position: position, next: next)
+                    stopRow(stops[index], isFirst: index == 0, isCurrent: index == current, position: position)
                 case .gap(_, let count):
                     gapRow(count: count)
                 }
@@ -73,28 +73,28 @@ struct StopList: View {
         return items
     }
 
-    private func stopRow(_ stop: TrainPath.StopTime, isFirst: Bool, position: TrainPosition?, next: TrainPath.StopTime?) -> some View {
+    private func stopRow(_ stop: TrainPath.StopTime, isFirst: Bool, isCurrent: Bool, position: TrainPosition?) -> some View {
         let passed = stop.departure.addingTimeInterval(delay) < now && position?.stationID != stop.stationID
         let isEnd = stop.stationID == originID || stop.stationID == destinationID
-        let isNext = stop.stationID == next?.stationID
         return HStack(spacing: 10) {
-            // The rail: a dot per stop joined by a line; the current stop is a ring.
+            // The rail: a dot per stop joined by a line; the current stop is larger and green.
             ZStack {
                 if !isFirst {
                     Rectangle().fill(Color.secondary.opacity(0.3)).frame(width: 2).offset(y: -11).frame(height: 22)
                 }
                 Circle()
-                    .fill(isNext ? Color.green : position?.stationID == stop.stationID ? Color.accentColor : (passed ? Color.secondary.opacity(0.4) : Color.secondary))
-                    .frame(width: isEnd || isNext ? 9 : 7, height: isEnd || isNext ? 9 : 7)
+                    .fill(isCurrent ? Color.green : (passed ? Color.secondary.opacity(0.4) : Color.secondary))
+                    .frame(width: isEnd || isCurrent ? 9 : 7, height: isEnd || isCurrent ? 9 : 7)
             }
             .frame(width: 14, height: 22)
 
             Text(StationCatalog.station(id: stop.stationID)?.name ?? stop.stationID)
-                .font(.subheadline.weight(isEnd || isNext ? .semibold : .regular))
-                .foregroundStyle(isNext ? AnyShapeStyle(.green) : AnyShapeStyle(.primary))
+                .font(.subheadline.weight(isEnd || isCurrent ? .semibold : .regular))
+                .foregroundStyle(isCurrent ? AnyShapeStyle(.green) : AnyShapeStyle(.primary))
             Spacer()
             Text(Format.time((stop.stationID == destinationID ? stop.arrival : stop.departure).addingTimeInterval(delay)))
-                .font(.subheadline)
+                .font(.subheadline.weight(isCurrent ? .semibold : .regular))
+                .foregroundStyle(isCurrent ? AnyShapeStyle(.green) : AnyShapeStyle(.primary))
                 .monospacedDigit()
         }
         .foregroundStyle(passed ? .secondary : .primary)
