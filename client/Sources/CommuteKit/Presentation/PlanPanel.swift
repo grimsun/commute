@@ -130,13 +130,15 @@ struct PlanPanel: View {
                         }
                     }
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 24)
+                    .padding(.bottom, 16)
                     // Stage changes (on track → get ready → leave → next train) and row states animate.
                     .animation(.smooth(duration: 0.35), value: plan.map { PanelPhase(plan: $0, now: now, includesRows: isExpanded) })
                     .animation(.smooth(duration: 0.25), value: isExpanded)
                 }
             }
             .scrollIndicators(.hidden)
+            // The sheet floats above the home indicator already; its inset would double the margin.
+            .ignoresSafeArea(.container, edges: .bottom)
             .scrollDisabled(!isExpanded)
             .scrollBounceBehavior(.basedOnSize)
             .trackScrolling($isScrolling)
