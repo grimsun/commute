@@ -65,7 +65,7 @@ final class CommutePlannerTests: XCTestCase {
         ]
         let plan = try await planner(trains).plan(profile: profile(), direction: .homeToWork, now: at(8, 55))
 
-        XCTAssertEqual(plan.upcoming.map(\.trainNumber), ["105", "107", "109"], "only two departed rows")
+        XCTAssertEqual(plan.upcoming.map(\.trainNumber), ["107", "109"], "only one departed row")
         XCTAssertEqual(plan.enRoute.map(\.trainNumber), ["101", "103", "105", "107"], "101 arrived at 8:45 but the rider may still be on the last leg")
     }
 
@@ -147,12 +147,12 @@ final class CommutePlannerTests: XCTestCase {
         XCTAssertEqual(plan.upcoming.map(\.trainNumber), ["403", "503", "105"], "the list shows every service")
     }
 
-    func testListLeadsWithTwoDepartedTrains() async throws {
+    func testListLeadsWithOneDepartedTrain() async throws {
         let trains = (0..<5).map { train("10\($0)", departs: at(7, 0).addingTimeInterval(Double($0) * 15 * 60)) }
         let plan = try await planner(trains).plan(profile: profile(), direction: .homeToWork, now: at(7, 40))
 
         // 7:00, 7:15, 7:30 left; 7:45 and 8:00 are ahead.
-        XCTAssertEqual(plan.upcoming.map(\.trainNumber), ["101", "102", "103", "104"])
+        XCTAssertEqual(plan.upcoming.map(\.trainNumber), ["102", "103", "104"])
     }
 
     func testPickedTrainOverridesTargetWhileCatchable() async throws {

@@ -46,7 +46,7 @@ struct UpcomingTrainsCard: View {
     @State private var openRowID: String?
     @State private var openPath: TrainPath?
 
-    /// Upcoming rows shown before "Show more" (departed rows come on top of these).
+    /// Upcoming rows shown before "Show more" (the departed row comes on top of these).
     private static let collapsedUpcoming = 4
 
     var body: some View {
@@ -116,7 +116,7 @@ struct UpcomingTrainsCard: View {
                         }
                     } label: {
                         HStack(spacing: 4) {
-                            Text(showsAll ? "Show less" : "Show \(plan.upcoming.count - collapsedRows.count) more")
+                            Text(showsAll ? "Show less" : "Show \(listedTrains.count - collapsedCount) more")
                             Image(systemName: "chevron.down")
                                 .font(.caption.weight(.semibold))
                                 .rotationEffect(.degrees(showsAll ? 180 : 0))
@@ -135,15 +135,25 @@ struct UpcomingTrainsCard: View {
     }
 
     private var visibleRows: [TrainDeparture] {
-        showsAll ? plan.upcoming : collapsedRows
+        showsAll ? listedTrains : collapsedRows
     }
 
-    /// Departed rows, then the next few; the target train is always included.
+    /// One departed row, for context: the train being ridden if it has left, else the latest.
+    /// Trains that leave between re-plans drop off here, so there's never more than one.
+    private var listedTrains: [TrainDeparture] {
+        let upcoming = plan.upcoming.filter { $0.departureTime > now }
+        let departed = plan.enRoute.first { $0.id == highlightedID && $0.departureTime <= now }
+            ?? plan.upcoming.last { $0.departureTime <= now }
+        return (departed.map { [$0] } ?? []) + upcoming
+    }
+
+    /// The departed row, then the next few; the target train is always included.
     private var collapsedRows: [TrainDeparture] {
-        let firstUpcoming = plan.upcoming.firstIndex { $0.departureTime > now } ?? plan.upcoming.count
-        let targetIndex = plan.upcoming.firstIndex { $0.id == highlightedID } ?? 0
+        let trains = listedTrains
+        let firstUpcoming = trains.firstIndex { $0.departureTime > now } ?? trains.count
+        let targetIndex = trains.firstIndex { $0.id == highlightedID } ?? 0
         let end = max(firstUpcoming + Self.collapsedUpcoming, targetIndex + 1)
-        return Array(plan.upcoming.prefix(end))
+        return Array(trains.prefix(end))
     }
 
     /// Tap a row to see its stops; tap again (or another row) to close.
@@ -166,7 +176,7 @@ struct UpcomingTrainsCard: View {
     }
 
     private var hiddenCount: Int {
-        showsAll ? 0 : plan.upcoming.count - visibleRows.count
+        showsAll ? 0 : listedTrains.count - visibleRows.count
     }
 
     private func row(_ train: TrainDeparture, showsCountdown: Bool) -> some View {

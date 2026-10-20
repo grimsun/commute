@@ -19,7 +19,7 @@ public enum PlannerError: Error, Equatable {
 /// A train the rider picked overrides all of this while it can still be caught.
 public struct DefaultPlanner: CommutePlanning {
     /// How many already-departed trains lead the list, for context.
-    static let departedShown = 2
+    static let departedShown = 1
     static let departedLookback: TimeInterval = 90 * 60
 
     private let transit: TransitProvider
