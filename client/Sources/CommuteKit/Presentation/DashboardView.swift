@@ -21,6 +21,9 @@ public struct DashboardView: View {
     private static let heightKey = "commute.sheetHeight.v2"
     /// From the full-size loading card, until the real card is measured.
     @State private var placeholderHeight: CGFloat = 380
+    /// Set while the sheet is moving anyway (launch, settling at collapsed): the next measurement
+    /// may shrink the height too, so a card that was briefly taller doesn't leave a gap.
+    @State private var refitsOnMeasure = true
     /// Fits the train line and times.
     @State private var compactHeight: CGFloat = 150
     /// The sheet settles at its smallest detent while presenting, so compact joins afterwards.
@@ -70,8 +73,8 @@ public struct DashboardView: View {
         }
     }
 
-    /// The first real measurement sets the height (the loading card is a guess); after that it
-    /// only grows, so the sheet keeps one size as lines come and go and as the mode switches.
+    /// Fits the card on launch and whenever the sheet settles at collapsed; in between it only
+    /// grows, so the sheet keeps one size as lines come and go and as the mode switches.
     private func fitCollapsed(contentHeight: CGFloat, isPlaceholder: Bool) {
         // Only the collapsed layout counts: expanded adds stops, compact hides the header.
         guard panel == .collapsed else { return }
@@ -80,9 +83,18 @@ public struct DashboardView: View {
         let fitted = min(max((contentHeight - 16).rounded(), 200), 620)
         if isPlaceholder {
             placeholderHeight = fitted
-        } else if fitted > (fittedHeight ?? 0) + 1 {
+        } else if refitsOnMeasure ? abs(fitted - (fittedHeight ?? 0)) > 1 : fitted > (fittedHeight ?? 0) + 1 {
             fittedHeight = fitted
             UserDefaults.standard.set(Double(fitted), forKey: Self.heightKey)
+        }
+    }
+
+    /// Lets the measurements of the next moment refit the sheet, while it is still moving.
+    private func allowRefit() {
+        refitsOnMeasure = true
+        Task {
+            try? await Task.sleep(for: .seconds(1))
+            refitsOnMeasure = false
         }
     }
 
@@ -143,9 +155,15 @@ public struct DashboardView: View {
                 try? await Task.sleep(for: .milliseconds(500))
                 allowsCompact = true
                 panel = initialPanel
+                allowRefit()
             }
             if showsSettingsOnLaunch {
                 isSettingsPresented = true
+            }
+        }
+        .onChange(of: panel) { previous, current in
+            if current == .collapsed && previous != .collapsed {
+                allowRefit()
             }
         }
         .onChange(of: scenePhase) { previous, phase in
