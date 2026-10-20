@@ -14,12 +14,12 @@ public struct DashboardView: View {
     private var isExpanded: Bool { panel == .expanded }
     /// Applied once loaded: the sheet settles at its first detent while it is being presented.
     private let initialPanel: PanelSize
-    /// Collapsed heights fitted to each mode's card (schedule's is shorter); see `fitCollapsed`.
-    /// Remembered across launches, so the sheet opens at its final size and doesn't jump when
-    /// the loading card is replaced.
-    @State private var collapsedHeights: [AppMode: CGFloat] = Self.savedHeights()
-    private static let heightsKey = "commute.sheetHeights.v1"
-    /// From the full-size loading card, until a mode's real card is measured.
+    /// Collapsed height fitted to the card; see `fitCollapsed`. One for both modes, since a sheet
+    /// snaps rather than glides to a new height, and remembered across launches, so the sheet
+    /// opens at its final size and doesn't jump when the loading card is replaced.
+    @State private var fittedHeight: CGFloat? = Self.savedHeight()
+    private static let heightKey = "commute.sheetHeight.v2"
+    /// From the full-size loading card, until the real card is measured.
     @State private var placeholderHeight: CGFloat = 380
     /// Fits the train line and times.
     @State private var compactHeight: CGFloat = 150
@@ -34,36 +34,13 @@ public struct DashboardView: View {
         showsSettingsOnLaunch = showsSettings
     }
 
-    /// The current mode's collapsed height, changed with an animation so switching modes glides.
-    @State private var collapsedHeight: CGFloat = Self.savedHeights()[.commute] ?? 380
-
-    private func updateCollapsedHeight(animated: Bool = true) {
-        let target = collapsedHeights[viewModel.mode] ?? placeholderHeight
-        guard abs(target - collapsedHeight) > 0.5 else { return }
-        var transaction = Transaction(animation: .smooth(duration: 0.3))
-        transaction.disablesAnimations = !animated
-        withTransaction(transaction) {
-            collapsedHeight = target
-        }
+    private var collapsedHeight: CGFloat {
+        fittedHeight ?? placeholderHeight
     }
 
-    private static func savedHeights() -> [AppMode: CGFloat] {
-        let saved = UserDefaults.standard.dictionary(forKey: heightsKey) as? [String: Double] ?? [:]
-        var heights: [AppMode: CGFloat] = [:]
-        for (key, value) in saved {
-            if let mode = AppMode(rawValue: key) { heights[mode] = value }
-        }
-        return heights
-    }
-
-    private func saveHeights() {
-        let saved = Dictionary(uniqueKeysWithValues: collapsedHeights.map { ($0.key.rawValue, Double($0.value)) })
-        UserDefaults.standard.set(saved, forKey: Self.heightsKey)
-    }
-
-    /// The taller mode's collapsed height, so neither card covers the route.
-    private var mapBottomInset: CGFloat {
-        collapsedHeights.values.max() ?? placeholderHeight
+    private static func savedHeight() -> CGFloat? {
+        let saved = UserDefaults.standard.double(forKey: heightKey)
+        return saved > 0 ? saved : nil
     }
 
     private var collapsedDetent: PresentationDetent {
@@ -88,38 +65,29 @@ public struct DashboardView: View {
         }
     }
 
-    /// The first real measurement for a mode sets its height (the loading card is a guess); after
-    /// that it only grows, so the card keeps one size as its lines come and go.
+    /// The first real measurement sets the height (the loading card is a guess); after that it
+    /// only grows, so the sheet keeps one size as lines come and go and as the mode switches.
     private func fitCollapsed(contentHeight: CGFloat, isPlaceholder: Bool) {
         // Only the collapsed layout counts: expanded adds stops, compact hides the header.
         guard panel == .collapsed else { return }
         // The sheet floats above the home indicator, so the detent can be a little shorter than the
         // content: this leaves a bottom margin about as wide as the card's side margins.
         let fitted = min(max((contentHeight - 16).rounded(), 200), 620)
-        let mode = viewModel.mode
         if isPlaceholder {
-            if collapsedHeights[mode] == nil {
-                placeholderHeight = fitted
-            }
-        } else if let current = collapsedHeights[mode] {
-            if fitted > current + 1 {
-                collapsedHeights[mode] = fitted
-                saveHeights()
-            }
-        } else {
-            collapsedHeights[mode] = fitted
-            saveHeights()
+            placeholderHeight = fitted
+        } else if fitted > (fittedHeight ?? 0) + 1 {
+            fittedHeight = fitted
+            UserDefaults.standard.set(Double(fitted), forKey: Self.heightKey)
         }
-        updateCollapsedHeight()
     }
 
     public var body: some View {
         CommuteMapView(
             profile: viewModel.routeProfile,
             isSchedule: viewModel.mode == .schedule,
-            // One inset for every sheet position and mode: changing it as the sheet settles or the
-            // mode switches would make the map jump. Compact just reveals more of the map.
-            bottomInset: mapBottomInset,
+            // One inset for every sheet position: changing it as the sheet settles would make the
+            // map jump. Compact just reveals more of the map.
+            bottomInset: collapsedHeight,
             recenterRequest: recenterRequest,
             trainPath: viewModel.trainPath,
             trainDelay: TimeInterval(viewModel.plan?.train?.train.delaySeconds ?? 0),
@@ -164,8 +132,6 @@ public struct DashboardView: View {
         }
         .onChange(of: viewModel.isLoaded) { _, loaded in
             guard loaded else { return }
-            // The mode is known now; start at its remembered size without animating.
-            updateCollapsedHeight(animated: false)
             // Wait for the sheet's presentation to settle, or it resets to the first detent.
             Task {
                 try? await Task.sleep(for: .milliseconds(500))
@@ -175,9 +141,6 @@ public struct DashboardView: View {
             if showsSettingsOnLaunch {
                 isSettingsPresented = true
             }
-        }
-        .onChange(of: viewModel.mode) { _, _ in
-            updateCollapsedHeight()
         }
         .onChange(of: scenePhase) { previous, phase in
             if phase == .active {
