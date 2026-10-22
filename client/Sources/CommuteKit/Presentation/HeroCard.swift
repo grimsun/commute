@@ -278,11 +278,8 @@ struct HeroCard: View {
     private func tripButton(for train: TrainDeparture, urgency: Urgency) -> some View {
         if hasDeparted, let onEndTrip {
             Button(action: onEndTrip) {
-                Label("End trip", systemImage: "xmark")
-                    .font(.footnote.weight(.semibold))
+                tripButtonLabel("End trip")
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
                     .background(Color.secondary.opacity(0.12), in: Capsule())
             }
             .buttonStyle(.plain)
@@ -295,11 +292,8 @@ struct HeroCard: View {
                 onTakeTrain(train)
             } label: {
                 // Away from home or work, the rider is likely at or near the station already.
-                Text(isElsewhere ? "On this train" : "On my way")
-                    .font(.footnote.weight(.semibold))
+                tripButtonLabel(isElsewhere ? "On this train" : "On my way")
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
                     .background(Color.accentColor, in: Capsule())
             }
             .buttonStyle(.plain)
@@ -307,6 +301,20 @@ struct HeroCard: View {
             .accessibilityHint("Marks this train as the one you’re taking")
             .accessibilityIdentifier("on-my-way")
         }
+    }
+
+    /// Sized to the longest of the trip buttons' titles, so they swap without changing size.
+    private func tripButtonLabel(_ title: String) -> some View {
+        ZStack {
+            ForEach(["On my way", "On this train", "End trip"], id: \.self) { text in
+                Text(text).hidden()
+            }
+            Text(title)
+        }
+        .font(.footnote.weight(.semibold))
+        .lineLimit(1)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
     }
 
     private func trainTitle(_ train: TrainDeparture) -> String {
