@@ -25,13 +25,31 @@ struct PlanPanel: View {
 
     private static let topID = "top"
     private static let compactTopPadding: CGFloat = 22
-    /// How often the card re-evaluates countdowns, colors and row states between refreshes.
-    /// Cheap enough to do every second, so stage changes land on time.
-    private static let tick: TimeInterval = 1
-
-    /// Paused while scrolling; compact shows no countdowns, so a minute is enough there.
-    private var tickInterval: TimeInterval {
-        isScrolling ? 3600 : isCompact ? 60 : Self.tick
+    /// When the card re-evaluates countdowns, colors and row states between refreshes: only at the
+    /// moments something shown can change. Paused while scrolling; compact shows no countdowns, so
+    /// once a minute is enough there.
+    private func tickSchedule(plan: CommutePlan?, path: TrainPath?) -> ChangeSchedule {
+        if isScrolling {
+            return ChangeSchedule(offsets: [], isPaused: true)
+        }
+        if isCompact {
+            return ChangeSchedule(offsets: [0])
+        }
+        var instants: [Date] = viewModel.missedTrain.map { [$0.until] } ?? []
+        if let plan {
+            for train in plan.upcoming + plan.enRoute {
+                let attempts = plan.attempts(for: train)
+                instants += [train.departureTime, train.arrivalTime, plan.doorArrival(for: train),
+                             attempts.getReadyAt, attempts.leaveAt, attempts.tooLateAt]
+            }
+        }
+        if let path {
+            let delay = TimeInterval((viewModel.departedTrain ?? plan?.train?.train)?.delaySeconds ?? 0)
+            instants += path.stops.flatMap { [$0.arrival.addingTimeInterval(delay), $0.departure.addingTimeInterval(delay)] }
+        }
+        // The card's clock can run ahead of the real one (debug), so map onto the real clock.
+        let shift = viewModel.currentDate().timeIntervalSinceNow
+        return ChangeSchedule(instants: instants.map { $0.addingTimeInterval(-shift) })
     }
 
     var body: some View {
@@ -49,7 +67,7 @@ struct PlanPanel: View {
         let isOtherDay = isSchedule && viewModel.scheduleDayOffset != 0
         return ScrollViewReader { scroller in
             ScrollView {
-                SwiftUI.TimelineView(.periodic(from: .now, by: tickInterval)) { _ in
+                SwiftUI.TimelineView(tickSchedule(plan: plan, path: trainPath)) { _ in
                     // Another day's schedule reads as if it were that day at this time.
                     let now = viewModel.displayDate(for: viewModel.currentDate())
                     // Travelling until the door-arrival time; evaluated every tick so it ends on time.
@@ -340,6 +358,54 @@ extension View {
             }
         } else {
             self
+        }
+    }
+}
+
+/// Fires at the seconds of each minute when something shown can change, and every 15 s besides.
+/// Countdowns are in whole minutes, so a deadline changes what's shown at the same second of
+/// every minute before it: a few redraws a minute instead of sixty.
+struct ChangeSchedule: TimelineSchedule, Equatable {
+    /// Seconds past the minute, sorted.
+    let offsets: [Double]
+    var isPaused = false
+
+    private static let backstop: [Double] = [0, 15, 30, 45]
+
+    init(offsets: [Double], isPaused: Bool = false) {
+        self.offsets = offsets.sorted()
+        self.isPaused = isPaused
+    }
+
+    init(instants: [Date]) {
+        // A moment after each deadline, so the new value has taken effect; tenths are plenty.
+        let seconds = instants.map { (($0.timeIntervalSinceReferenceDate + 0.05).truncatingRemainder(dividingBy: 60) * 10).rounded(.up) / 10 }
+        self.init(offsets: Array(Set(seconds + Self.backstop)))
+    }
+
+    func entries(from startDate: Date, mode: TimelineScheduleMode) -> AnyIterator<Date> {
+        var emittedStart = false
+        var minute = (startDate.timeIntervalSinceReferenceDate / 60).rounded(.down) * 60
+        var index = 0
+        let offsets = offsets
+        let isPaused = isPaused
+        return AnyIterator {
+            if !emittedStart {
+                emittedStart = true
+                return startDate
+            }
+            guard !isPaused, !offsets.isEmpty else { return nil }
+            while true {
+                if index == offsets.count {
+                    index = 0
+                    minute += 60
+                }
+                let date = Date(timeIntervalSinceReferenceDate: minute + offsets[index])
+                index += 1
+                if date > startDate {
+                    return date
+                }
+            }
         }
     }
 }
