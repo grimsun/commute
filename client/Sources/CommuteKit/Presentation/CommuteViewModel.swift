@@ -65,6 +65,11 @@ public final class CommuteViewModel {
     private let now: () -> Date
     /// The mode-specific implementations; rebuilt when the data source changes.
     private var services: CommuteServices
+    /// Driving estimates by direction. They need Apple Maps, so they load after the plans show
+    /// and are kept a few minutes instead of being asked for on every refresh.
+    private var didFinishLaunch = false
+    private var carEstimates: [Direction: (option: CarOption?, at: Date)] = [:]
+    private static let carEstimateLifetime: TimeInterval = 5 * 60
     /// A direction flipped by hand, kept until the current trip changes (see `CommuteWindow`).
     private var pinnedDirection: (direction: Direction, whileActive: CommuteKey)?
     /// A mode switched by hand, kept while the automatic choice stays the same.
@@ -158,6 +163,7 @@ public final class CommuteViewModel {
             #endif
             await loadDepartures()
             await refresh()
+            didFinishLaunch = true
             await rescheduleAlerts()
             await watchLocation()
         }
@@ -171,7 +177,8 @@ public final class CommuteViewModel {
     /// Called when the app returns to the foreground. Back from the background, it starts in the
     /// automatic mode again, like a fresh launch.
     public func becameActive(fromBackground: Bool = false) async {
-        guard didLoadProfile else { return }
+        // The launch itself becomes active too; `run()` does that first refresh.
+        guard didFinishLaunch else { return }
         if fromBackground {
             pinnedMode = nil
             scheduleKindChoice = nil
@@ -204,20 +211,18 @@ public final class CommuteViewModel {
             // Re-planned only when predictions changed since the plans above were made.
             if let feed = services.liveFeed, wantsLiveData(newPlans, at: date) {
                 let used = await feed.latest()?.fetchedAt
+                if plans.isEmpty {
+                    // Nothing on screen yet (launch): show the timetable now rather than wait on the network.
+                    guard generation == refreshGeneration else { return }
+                    show(newPlans, at: date)
+                }
                 await feed.refreshIfDue(manual: userInitiated)
                 if await feed.latest()?.fetchedAt != used {
                     newPlans = try await computePlans(at: date)
                 }
             }
             guard generation == refreshGeneration else { return }
-            noteMissedTrains(replacedBy: newPlans, at: date)
-            // Animated so a train change (missed → next) slides in rather than snapping.
-            withAnimation(.smooth(duration: 0.35)) {
-                plans = newPlans
-                errorMessage = nil
-                // A trip that just ended hands over to the next one.
-                updateDirection(at: date)
-            }
+            show(newPlans, at: date)
             // A pick the planner no longer follows has departed or become uncatchable.
             if newPlans[.schedule]?.train?.isManual != true {
                 schedulePick = nil
@@ -231,6 +236,7 @@ public final class CommuteViewModel {
             plans = [:]
             errorMessage = Self.message(for: error)
         }
+        Task { await updateCarEstimates(at: date) }
         timetableInfo = await timetable.info()
         scheduleDay = await timetable.scheduleDay(for: plan?.train?.train.departureTime ?? date)
         await loadPaths()
@@ -239,6 +245,17 @@ public final class CommuteViewModel {
             await rescheduleAlerts()
         }
         await detectDeparture(at: date)
+    }
+
+    private func show(_ newPlans: [PlanKey: CommutePlan], at date: Date) {
+        noteMissedTrains(replacedBy: newPlans, at: date)
+        // Animated so a train change (missed → next) slides in rather than snapping.
+        withAnimation(.smooth(duration: 0.35)) {
+            plans = newPlans
+            errorMessage = nil
+            // A trip that just ended hands over to the next one.
+            updateDirection(at: date)
+        }
     }
 
     /// The Lock Screen countdown follows the current trip, not a direction flipped by hand.
@@ -285,7 +302,8 @@ public final class CommuteViewModel {
     /// Both commute directions (they also drive alerts, location and the Lock Screen) and the
     /// schedule stations. The schedule plan has no car or traffic lookups.
     private func computePlans(at date: Date) async throws -> [PlanKey: CommutePlan] {
-        let planner = DefaultPlanner(transit: services.transit, traffic: traffic)
+        // Trains only; driving estimates are attached from `carEstimates`.
+        let planner = DefaultPlanner(transit: services.transit, traffic: nil)
         let profile = profile
         let picks = picks
         let scheduleDate = Calendar.caltrain.date(byAdding: .day, value: scheduleDayOffset, to: date) ?? date
@@ -306,7 +324,34 @@ public final class CommuteViewModel {
             plans[.commute(.homeToWork)] = try? await toWork
             plans[.commute(.workToHome)] = try? await toHome
         }
+        for direction in Direction.allCases {
+            plans[.commute(direction)]?.car = carEstimates[direction]?.option
+        }
         return plans
+    }
+
+    /// Asks for driving estimates that are missing or stale, then adds them to the shown plans.
+    private func updateCarEstimates(at date: Date) async {
+        guard let traffic else { return }
+        let stale = Direction.allCases.filter { direction in
+            carEstimates[direction].map { date.timeIntervalSince($0.at) > Self.carEstimateLifetime || $0.at > date } ?? true
+        }
+        guard !stale.isEmpty else { return }
+        let planner = DefaultPlanner(transit: services.transit, traffic: traffic)
+        let profile = profile
+        // Marked first, so refreshes in the meantime don't ask again.
+        for direction in stale {
+            carEstimates[direction] = (carEstimates[direction]?.option, date)
+        }
+        await withTaskGroup(of: (Direction, CarOption?).self) { group in
+            for direction in stale {
+                group.addTask { (direction, await planner.carOption(profile: profile, direction: direction, now: date)) }
+            }
+            for await (direction, option) in group {
+                carEstimates[direction] = (option, date)
+                plans[.commute(direction)]?.car = option
+            }
+        }
     }
 
     /// How close a departure must be before live delays are worth a request.
@@ -505,6 +550,8 @@ public final class CommuteViewModel {
         guard newProfile != profile else { return }
         let previous = profile
         profile = newProfile
+        // Places or the traffic threshold may have changed.
+        carEstimates = [:]
 
         if newProfile.dataSource != previous.dataSource {
             // Clear alerts the old implementation scheduled before switching.

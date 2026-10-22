@@ -140,6 +140,11 @@ public struct DefaultPlanner: CommutePlanning {
         )
     }
 
+    /// Driving door to door instead, for one direction; `nil` without traffic data.
+    public func carOption(profile: CommuteProfile, direction: Direction, now: Date) async -> CarOption? {
+        await carOption(from: profile.origin(for: direction).coordinate, to: profile.destination(for: direction).coordinate, now: now, profile: profile)
+    }
+
     private func carOption(from: Coordinate?, to: Coordinate?, now: Date, profile: CommuteProfile) async -> CarOption? {
         guard let traffic, let from, let to else { return nil }
         do {
