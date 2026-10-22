@@ -34,6 +34,8 @@ struct UpcomingTrainsCard: View {
     var isOtherDay = false
     /// "Weekday schedule" etc., next to the list title.
     let scheduleLabel: String?
+    /// Commute mode: the train types picked in Settings; the others are marked skipped.
+    var preferredServices: Set<TrainService>? = nil
     let onPick: (TrainDeparture) -> Void
     let onClearPick: () -> Void
     /// "I'm taking this train"; `nil` outside commute mode.
@@ -45,6 +47,7 @@ struct UpcomingTrainsCard: View {
     @State private var showsAll = false
     @State private var openRowID: String?
     @State private var openPath: TrainPath?
+    @State private var showsSkippedInfo = false
 
     /// Upcoming rows shown before "Show more" (the departed row comes on top of these).
     private static let collapsedUpcoming = 4
@@ -52,12 +55,18 @@ struct UpcomingTrainsCard: View {
     var body: some View {
         let rows = visibleRows
         let collapsedCount = collapsedRows.count
-        let countdownIDs = Set(plan.upcoming.filter { RowStatus(train: $0, plan: plan, now: now, isElsewhere: isElsewhere) == .catchable }.prefix(2).map(\.id))
+        let countdownIDs = Set(plan.upcoming.filter { !isSkipped($0) && RowStatus(train: $0, plan: plan, now: now, isElsewhere: isElsewhere) == .catchable }.prefix(2).map(\.id))
         Card {
             VStack(alignment: .leading, spacing: 4) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Upcoming trains")
-                        .font(.headline)
+                    HStack {
+                        Text("Upcoming trains")
+                            .font(.headline)
+                        Spacer()
+                        if rows.contains(where: isSkipped) {
+                            skippedInfoButton
+                        }
+                    }
                     if let scheduleLabel {
                         Text(scheduleLabel)
                             .font(.caption)
@@ -179,13 +188,44 @@ struct UpcomingTrainsCard: View {
         showsAll ? 0 : listedTrains.count - visibleRows.count
     }
 
+    /// A train of a type turned off in Settings, unless it's the one on the card (pinned).
+    private func isSkipped(_ train: TrainDeparture) -> Bool {
+        guard let preferredServices, train.id != highlightedID else { return false }
+        return !preferredServices.contains(train.service)
+    }
+
+    private var skippedInfoButton: some View {
+        Button {
+            showsSkippedInfo = true
+        } label: {
+            Image(systemName: "info.circle")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("About skipped trains")
+        .popover(isPresented: $showsSkippedInfo) {
+            Text("Skipped trains are types you turned off in Settings, so your commute is never planned on them. Touch and hold one to pin it anyway.")
+                .font(.subheadline)
+                .padding()
+                .frame(idealWidth: 280)
+                .fixedSize(horizontal: false, vertical: true)
+                .presentationCompactAdaptation(.popover)
+        }
+    }
+
     private func row(_ train: TrainDeparture, showsCountdown: Bool) -> some View {
         let status = RowStatus(train: train, plan: plan, now: now, isElsewhere: isElsewhere)
         let isTarget = train.id == highlightedID
+        // One of pin or take per row: pin while there's still time to leave for the train, take
+        // once it's time to go (or away from home and work, where there's no leaving to plan).
+        let canPin = status == .catchable && !isTarget
+            && (onTake == nil || (!isElsewhere && now < plan.attempts(for: train).leaveAt))
+        let canTake = !canPin && canTake(train, isTarget: isTarget)
         return Button {
             toggleStops(for: train)
         } label: {
-            TrainRow(train: train, plan: plan, now: now, status: status, isTarget: isTarget, isTaking: isTarget && isTripInProgress, isElsewhere: isElsewhere, isOtherDay: isOtherDay, showsCountdown: showsCountdown && !isOtherDay)
+            TrainRow(train: train, plan: plan, now: now, status: status, isTarget: isTarget, isTaking: isTarget && isTripInProgress, isElsewhere: isElsewhere, isOtherDay: isOtherDay, showsCountdown: showsCountdown && !isOtherDay, isSkipped: isSkipped(train))
         }
         .buttonStyle(.plain)
             // The long-press preview lifts the row; give it the card's surface and rounded corners.
@@ -193,7 +233,7 @@ struct UpcomingTrainsCard: View {
             .roundedContextMenuPreview()
             .contentShape(Rectangle())
             .contextMenu {
-                if status == .catchable && !isTarget {
+                if canPin {
                     Button {
                         onPick(train)
                     } label: {
@@ -205,7 +245,7 @@ struct UpcomingTrainsCard: View {
                         Label("Unpin", systemImage: "pin.slash")
                     }
                 }
-                if canTake(train, isTarget: isTarget), let onTake {
+                if canTake, let onTake {
                     Button {
                         onTake(train)
                     } label: {
@@ -221,13 +261,13 @@ struct UpcomingTrainsCard: View {
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("schedule-train-\(train.trainNumber)")
             .accessibilityActions {
-                if status == .catchable && !isTarget {
+                if canPin {
                     Button("Pin this train") { onPick(train) }
                 }
                 if isTarget && plan.train?.isManual == true {
                     Button("Unpin", action: onClearPick)
                 }
-                if canTake(train, isTarget: isTarget), let onTake {
+                if canTake, let onTake {
                     Button("I’m taking this train") { onTake(train) }
                 }
                 if isTarget && isTripInProgress {
@@ -255,6 +295,8 @@ struct TrainRow: View {
     let isElsewhere: Bool
     var isOtherDay = false
     let showsCountdown: Bool
+    /// A type turned off in Settings: never planned, so no countdown.
+    var isSkipped = false
 
     var body: some View {
         let urgency: Urgency = isTaking ? .relaxed : isElsewhere ? .neutral : Urgency(attempts: plan.attempts(for: train), now: now)
@@ -336,6 +378,8 @@ struct TrainRow: View {
                 Text("in \(Format.countdown(to: train.departureTime, from: now))")
                     .foregroundStyle(isTarget ? urgency.color : .secondary)
             }
+        case .catchable where isSkipped:
+            Text("Skipped").foregroundStyle(.secondary)
         case .catchable:
             if showsCountdown {
                 let leave = plan.attempts(for: train).leaveAt

@@ -47,7 +47,8 @@ services when the data source changes.
   the target time (morning: leave home; evening: leave work).
 - Too late = departure − minutes to the platform. Leave = too late − safety buffer. Get ready = leave − prep time.
 - Once the target train is too late, the plan rolls to the next catchable train.
-- The schedule shows every train type. Touch and hold a catchable train, then choose **Pin this train**
+- The schedule shows every train type; types turned off in Settings say **Skipped** (the ⓘ by the
+  list title explains). Touch and hold a train you can still leave for, then choose **Pin this train**
   to follow it for this trip. Touch and hold the selected train and choose **Unpin**
   to clear the override.
   A manual target expires when it can no longer be caught or its commute window ends.
@@ -64,7 +65,7 @@ services when the data source changes.
 - Automatic selection rolls forward for four hours after the target leave time, then moves to
   the next commute. Late evening windows continue across midnight. Tomorrow’s trains are labeled.
 - **On my way** (on the card within 90 minutes of the train) or **I’m taking this train** (touch and hold
-  any row, even one that already left) marks the trip by hand; **End trip** undoes it. Settings → Location
+  a row once it's time to leave for it, even one that already left; earlier rows offer Pin instead) marks the trip by hand; **End trip** undoes it. Settings → Location
   → **Notice when I leave** turns automatic detection on or off; off, location is never used.
 - With location access (while using the app), leaving the starting place during a trip marks it as
   departed: the card shows "You're on your way" / "You're on the train" and that trip's alerts stop.

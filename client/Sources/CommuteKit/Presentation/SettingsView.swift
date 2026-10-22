@@ -309,7 +309,7 @@ struct SettingsView: View {
         } header: {
             Text("Train types")
         } footer: {
-            Text("Only these trains are planned for and listed. At least one type stays on.")
+            Text("Only these trains are planned for; others show as Skipped in the list. At least one type stays on.")
         }
     }
 
