@@ -295,8 +295,7 @@ struct HeroCard: View {
                 onTakeTrain(train)
             } label: {
                 // Away from home or work, the rider is likely at or near the station already.
-                Label(isElsewhere ? "On this train" : "On my way",
-                      systemImage: isElsewhere ? "tram.fill" : profile.accessMode == .bike ? "bicycle" : "figure.walk")
+                Text(isElsewhere ? "On this train" : "On my way")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 10)
