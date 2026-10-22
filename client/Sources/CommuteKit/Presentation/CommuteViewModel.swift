@@ -539,23 +539,6 @@ public final class CommuteViewModel {
         await rescheduleAlerts()
     }
 
-    /// Checks a server URL; returns a short status line for Settings.
-    public func testServer(_ urlText: String) async -> (ok: Bool, message: String) {
-        guard let url = DataSourceSettings(mode: .server, serverURL: urlText).parsedServerURL else {
-            return (false, "Enter a full http:// or https:// address.")
-        }
-        do {
-            let health = try await ServerTransitProvider(baseURL: url).checkHealth()
-            return (true, "Connected" + (health.version.map { " · server \($0)" } ?? ""))
-        } catch ServerError.badStatus(let code) {
-            return (false, "The server answered with HTTP \(code).")
-        } catch is DecodingError {
-            return (false, "Reached something, but it isn’t a Commute server.")
-        } catch {
-            return (false, "Can’t reach the server.")
-        }
-    }
-
     /// Door-to-platform minutes suggested by routing, rounded up.
     public func estimateMinutes(from place: Place, stationID: String, mode: AccessMode, bikeSpeedKph: Double) async -> Int? {
         guard let from = place.coordinate, let station = StationCatalog.station(id: stationID) else { return nil }

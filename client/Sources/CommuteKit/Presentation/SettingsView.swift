@@ -1,25 +1,26 @@
 import SwiftUI
 
 /// Edits a draft of the profile; changes apply when the sheet closes with Done.
-/// Timetable refresh and the server check act immediately.
+/// Timetable refresh acts immediately.
 struct SettingsView: View {
     let viewModel: CommuteViewModel
 
     @Environment(\.dismiss) private var dismiss
     @State private var draft: CommuteProfile
-    @State private var serverCheck: (ok: Bool, message: String)?
-    @State private var isCheckingServer = false
     @State private var estimating: Set<String> = []
 
     init(viewModel: CommuteViewModel) {
         self.viewModel = viewModel
-        _draft = State(initialValue: viewModel.profile)
+        var profile = viewModel.profile
+        // The server isn't offered here any more; saving settings returns to on-device data.
+        profile.dataSource.mode = .standalone
+        _draft = State(initialValue: profile)
     }
 
     var body: some View {
         NavigationStack {
             Form {
-                dataSourceSection
+                timetableSection
                 placesSection
                 stationsSection
                 travelSection
@@ -51,55 +52,17 @@ struct SettingsView: View {
 
     private var isValid: Bool {
         draft.homeStationID != draft.workStationID
-            && (draft.dataSource.mode == .standalone || draft.dataSource.parsedServerURL != nil)
     }
 
-    // MARK: Data source
+    // MARK: Train data
 
-    private var dataSourceSection: some View {
+    private var timetableSection: some View {
         Section {
-            Picker("Train data", selection: $draft.dataSource.mode) {
-                Text("On this phone").tag(DataMode.standalone)
-                Text("Server").tag(DataMode.server)
-            }
-            .pickerStyle(.segmented)
-
-            if draft.dataSource.mode == .server {
-                TextField("https://commute.example.com", text: $draft.dataSource.serverURL)
-                    .textContentType(.URL)
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                    .keyboardType(.URL)
-                    .textInputAutocapitalization(.never)
-                    #endif
-                HStack {
-                    Button("Test connection") {
-                        Task {
-                            isCheckingServer = true
-                            serverCheck = await viewModel.testServer(draft.dataSource.serverURL)
-                            isCheckingServer = false
-                        }
-                    }
-                    .disabled(draft.dataSource.serverURL.isEmpty || isCheckingServer)
-                    Spacer()
-                    if isCheckingServer {
-                        ProgressView()
-                    } else if let serverCheck {
-                        Label(serverCheck.message, systemImage: serverCheck.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(serverCheck.ok ? .green : .red)
-                            .lineLimit(2)
-                    }
-                }
-            }
-
             timetableRow
         } header: {
-            Text("Data source")
+            Text("Train data")
         } footer: {
-            Text(draft.dataSource.mode == .standalone
-                ? "Uses Caltrain’s published timetable. No live delays; alerts come from the app."
-                : "Your server provides live delays and sends push notifications. The timetable is used when it can’t be reached.")
+            Text("Caltrain’s published timetable, with live delays from Caltrain near your trips. Alerts come from the app.")
         }
     }
 
@@ -266,18 +229,11 @@ struct SettingsView: View {
     private var alertsSection: some View {
         Section {
             Toggle("Lock Screen countdown", isOn: $draft.liveActivityEnabled)
-            if draft.dataSource.mode == .standalone {
-                Toggle("Get ready & leave now alerts", isOn: $draft.leaveAlertsEnabled)
-            } else {
-                Label("Sent by your server", systemImage: "bell.badge")
-                    .foregroundStyle(.secondary)
-            }
+            Toggle("Get ready & leave now alerts", isOn: $draft.leaveAlertsEnabled)
         } header: {
             Text("Notifications")
         } footer: {
-            if draft.dataSource.mode == .standalone {
-                Text("Scheduled a week ahead from the timetable, so they arrive even if the app stays closed. They can’t follow delays. With location access, a trip’s remaining alerts stop once you’ve left.")
-            }
+            Text("Scheduled a week ahead from the timetable, so they arrive even if the app stays closed. They can’t follow delays. With location access, a trip’s remaining alerts stop once you’ve left.")
         }
     }
 

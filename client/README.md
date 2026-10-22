@@ -8,7 +8,7 @@
 | Delays, cancellations | ✓ Caltrain's public JSON feed, fetched only within 90 min of a trip, at most every 3 min (30 s on manual refresh), 5 min backoff after errors | ✓ |
 | Leave alerts | Local notifications, scheduled a week ahead | Push notifications from the server |
 
-Switch in Settings → Data source. The timetable refreshes from Settings → Caltrain timetable → Refresh.
+Settings only offers standalone; server mode stays in the code but is reachable only through a saved profile, and saving Settings returns to standalone. The timetable refreshes from Settings → Train data → Refresh.
 
 ## Architecture
 
