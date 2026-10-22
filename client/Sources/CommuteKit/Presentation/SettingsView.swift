@@ -160,12 +160,15 @@ struct SettingsView: View {
 
     private var travelSection: some View {
         Section {
-            Picker("Getting there", selection: $draft.accessMode) {
+            Picker("To the station", selection: Binding {
+                draft.accessMode
+            } set: { mode in
+                draft.switchAccessMode(to: mode)
+            }) {
                 ForEach(AccessMode.allCases, id: \.self) { mode in
                     Label(mode.displayName, systemImage: mode.symbol).tag(mode)
                 }
             }
-            .pickerStyle(.segmented)
 
             minutesRow("Home ↔ station", minutes: $draft.homeStationMinutes, place: draft.home, stationID: draft.homeStationID)
             minutesRow("Work ↔ station", minutes: $draft.workStationMinutes, place: draft.work, stationID: draft.workStationID)
@@ -176,7 +179,9 @@ struct SettingsView: View {
         } header: {
             Text("Travel times")
         } footer: {
-            Text("Door to platform, including locking up your bike. Estimate asks Apple Maps; adjust to what you actually take.")
+            Text(draft.accessMode == .bike
+                 ? "Door to platform, including locking up your bike. Bike and walk keep their own times. Estimate asks Apple Maps; adjust to what you actually take."
+                 : "Door to platform on foot. Bike and walk keep their own times. Estimate asks Apple Maps; adjust to what you actually take.")
         }
     }
 

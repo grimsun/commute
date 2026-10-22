@@ -36,6 +36,25 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(CommuteProfile.self, from: data), profile)
     }
 
+    func testSwitchingAccessModeKeepsEachModesMinutes() throws {
+        var profile = CommuteProfile.default
+        profile.homeStationMinutes = 6
+        profile.workStationMinutes = 4
+
+        profile.switchAccessMode(to: .walk)
+        XCTAssertEqual(profile.accessMode, .walk)
+        XCTAssertEqual([profile.homeStationMinutes, profile.workStationMinutes], [18, 12], "first switch guesses from bike time")
+
+        profile.homeStationMinutes = 20
+        profile.switchAccessMode(to: .bike)
+        XCTAssertEqual([profile.homeStationMinutes, profile.workStationMinutes], [6, 4], "bike minutes come back")
+
+        profile.switchAccessMode(to: .walk)
+        XCTAssertEqual([profile.homeStationMinutes, profile.workStationMinutes], [20, 12], "edited walk minutes come back")
+        let data = try JSONEncoder().encode(profile)
+        XCTAssertEqual(try JSONDecoder().decode(CommuteProfile.self, from: data), profile)
+    }
+
     func testTimeOfDayUsesPacificTime() {
         let calendar = Calendar.caltrain
         let day = calendar.date(from: DateComponents(year: 2026, month: 10, day: 19, hour: 3))!

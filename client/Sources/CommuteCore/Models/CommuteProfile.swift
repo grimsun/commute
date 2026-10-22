@@ -48,6 +48,38 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
     /// The last stations looked up in schedule mode; `nil` starts from the commute stations.
     public var scheduleRoute: StationRoute?
 
+    /// Station minutes for the access mode not in use, restored on switching back.
+    public var otherModeMinutes: StationMinutes?
+
+    public struct StationMinutes: Codable, Equatable, Sendable {
+        public var home: Int
+        public var work: Int
+
+        public init(home: Int, work: Int) {
+            self.home = home
+            self.work = work
+        }
+    }
+
+    /// Walking takes about this many times as long as riding the same way.
+    static let walkToBikeRatio = 3.0
+
+    /// Switches bike / walk, keeping each mode's own station minutes. The first switch guesses the
+    /// other mode's from this one's; Estimate with Maps or the steppers refine it.
+    public mutating func switchAccessMode(to mode: AccessMode) {
+        guard mode != accessMode else { return }
+        let current = StationMinutes(home: homeStationMinutes, work: workStationMinutes)
+        let factor = mode == .walk ? Self.walkToBikeRatio : 1 / Self.walkToBikeRatio
+        let restored = otherModeMinutes ?? StationMinutes(
+            home: max(1, Int((Double(current.home) * factor).rounded())),
+            work: max(1, Int((Double(current.work) * factor).rounded()))
+        )
+        homeStationMinutes = restored.home
+        workStationMinutes = restored.work
+        otherModeMinutes = current
+        accessMode = mode
+    }
+
     public init(
         home: Place,
         work: Place,
@@ -134,6 +166,7 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         case home, work, homeStationID, workStationID, accessMode, bikeSpeedKph, homeStationMinutes, workStationMinutes
         case stationSafetyBufferMinutes, prepLeadTimeMinutes, morningTargetLeave, eveningTargetLeave, commuteDays
         case preferredServices, carGoodDeltaMinutes, leaveAlertsEnabled, dataSource, liveActivityEnabled, usesLocation, scheduleRoute
+        case otherModeMinutes
     }
 
     public init(from decoder: Decoder) throws {
@@ -159,5 +192,6 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         liveActivityEnabled = try c.decodeIfPresent(Bool.self, forKey: .liveActivityEnabled) ?? d.liveActivityEnabled
         usesLocation = try c.decodeIfPresent(Bool.self, forKey: .usesLocation) ?? d.usesLocation
         scheduleRoute = try c.decodeIfPresent(StationRoute.self, forKey: .scheduleRoute)
+        otherModeMinutes = try c.decodeIfPresent(StationMinutes.self, forKey: .otherModeMinutes)
     }
 }
