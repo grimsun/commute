@@ -1,7 +1,7 @@
 import MapKit
 import SwiftUI
 
-/// Map behind the sheet: home, work, both stations, the access legs and the rail segment.
+/// Map behind the sheet: both stations, home and work when given as addresses, the access legs and the rail segment.
 struct CommuteMapView: View {
     let profile: CommuteProfile
     /// Station to station: no home, work or legs to them.
@@ -20,7 +20,7 @@ struct CommuteMapView: View {
     /// False while the sheet covers the map, so the train stops animating unseen.
     var isVisible = true
 
-    /// A place this close to its station is drawn as one pin, without a ride leg.
+    /// A place this close to its station counts as no address: only the station is drawn.
     private static let mergeDistance: Double = 200
 
     @State private var position: MapCameraPosition = .automatic
@@ -95,22 +95,25 @@ struct CommuteMapView: View {
         originStationID == profile.homeStationID ? profile.workStationID : profile.homeStationID
     }
 
+    /// Home or work, when the rider gave an address away from its station; else just the station.
+    private func address(_ place: Place, near station: Station?) -> Coordinate? {
+        guard !isSchedule, let coordinate = place.coordinate, let station,
+              coordinate.distance(to: station.coordinate) >= Self.mergeDistance else { return nil }
+        return coordinate
+    }
+
     private var pins: [Pin] {
         var pins: [Pin] = []
-        let ends: [(name: String, place: Coordinate?, station: Station?, symbol: String, color: Color)] = [
-            ("Home", profile.home.coordinate, homeStation, "house.fill", .blue),
-            ("Work", profile.work.coordinate, workStation, "briefcase.fill", .purple)
+        let ends: [(name: String, place: Place, station: Station?, symbol: String, color: Color)] = [
+            ("Home", profile.home, homeStation, "house.fill", .blue),
+            ("Work", profile.work, workStation, "briefcase.fill", .purple)
         ]
         for end in ends {
             guard let station = end.station else { continue }
-            if isSchedule || end.place == nil {
-                pins.append(Pin(id: station.id, title: station.name, coordinate: station.coordinate, symbol: "tram.fill", color: .red))
-            } else if let place = end.place, place.distance(to: station.coordinate) < Self.mergeDistance {
-                pins.append(Pin(id: end.name, title: "\(end.name) · \(station.name)", coordinate: station.coordinate, symbol: end.symbol, color: end.color))
-            } else if let place = end.place {
-                pins.append(Pin(id: end.name, title: end.name, coordinate: place, symbol: end.symbol, color: end.color))
-                pins.append(Pin(id: station.id, title: station.name, coordinate: station.coordinate, symbol: "tram.fill", color: .red))
+            if let address = address(end.place, near: station) {
+                pins.append(Pin(id: end.name, title: end.name, coordinate: address, symbol: end.symbol, color: end.color))
             }
+            pins.append(Pin(id: station.id, title: station.name, coordinate: station.coordinate, symbol: "tram.fill", color: .red))
         }
         return pins
     }
@@ -130,18 +133,15 @@ struct CommuteMapView: View {
     }
 
     private var accessLegs: [[CLLocationCoordinate2D]] {
-        if isSchedule { return [] }
-        return [
-            (profile.home.coordinate, homeStation?.coordinate),
-            (profile.work.coordinate, workStation?.coordinate)
-        ].compactMap { place, station in
-            guard let place, let station, place.distance(to: station) >= Self.mergeDistance else { return nil }
-            return [place.clLocationCoordinate, station.clLocationCoordinate]
+        [(profile.home, homeStation), (profile.work, workStation)].compactMap { place, station in
+            guard let station, let address = address(place, near: station) else { return nil }
+            return [address.clLocationCoordinate, station.coordinate.clLocationCoordinate]
         }
     }
 
     private var allCoordinates: [Coordinate] {
-        [profile.home.coordinate, profile.work.coordinate, homeStation?.coordinate, workStation?.coordinate].compactMap { $0 }
+        [address(profile.home, near: homeStation), address(profile.work, near: workStation),
+         homeStation?.coordinate, workStation?.coordinate].compactMap { $0 }
     }
 
     private var framingKey: String {
