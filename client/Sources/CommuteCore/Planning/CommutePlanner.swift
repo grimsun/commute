@@ -1,10 +1,5 @@
 import Foundation
 
-public protocol CommutePlanning: Sendable {
-    /// `pickedTripID` is a train the rider chose; it is followed while it can still be caught.
-    func plan(profile: CommuteProfile, direction: Direction, now: Date, pickedTripID: String?) async throws -> CommutePlan
-}
-
 public enum PlannerError: Error, Equatable {
     case unknownStation(String)
     case sameStation
@@ -17,7 +12,7 @@ public enum PlannerError: Error, Equatable {
 /// get ready → leave now. Once it is not, the plan rolls to the next catchable preferred train,
 /// for up to `CommuteWindow.rolloverInterval` after the target; then the target moves to tomorrow.
 /// A train the rider picked overrides all of this while it can still be caught.
-public struct DefaultPlanner: CommutePlanning {
+public struct CommutePlanner: Sendable {
     /// How many already-departed trains lead the list, for context.
     static let departedShown = 1
     static let departedLookback: TimeInterval = 90 * 60
@@ -32,6 +27,7 @@ public struct DefaultPlanner: CommutePlanning {
         self.calendar = calendar
     }
 
+    /// `pickedTripID` is a train the rider chose; it is followed while it can still be caught.
     public func plan(profile: CommuteProfile, direction: Direction, now: Date, pickedTripID: String? = nil) async throws -> CommutePlan {
         let originID = profile.originStationID(for: direction)
         let destinationID = profile.destinationStationID(for: direction)
@@ -72,7 +68,7 @@ public struct DefaultPlanner: CommutePlanning {
         // A morning schedule page may end before the evening (or tomorrow's) target.
         // Fetch that part of the timetable explicitly instead of choosing an earlier train.
         if !departures.contains(where: {
-            profile.preferredServices.contains($0.service) && !$0.isCancelled && attempts($0).leaveAt >= targetLeave
+            $0.isUsable(preferred: profile.preferredServices) && attempts($0).leaveAt >= targetLeave
         }), targetLeave > now {
             let targetSnapshot = try await transit.departures(
                 fromStation: originID,
@@ -84,7 +80,7 @@ public struct DefaultPlanner: CommutePlanning {
             departures += targetSnapshot.departures.filter { !known.contains($0.id) }
         }
         let all = departures.sorted { $0.departureTime < $1.departureTime }
-        let candidates = all.filter { profile.preferredServices.contains($0.service) && !$0.isCancelled }
+        let candidates = all.filter { $0.isUsable(preferred: profile.preferredServices) }
 
         let picked = pickedTripID.flatMap { id in
             all.first { $0.tripID == id && !$0.isCancelled && now <= attempts($0).tooLateAt }

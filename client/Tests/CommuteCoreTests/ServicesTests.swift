@@ -44,7 +44,7 @@ final class ServerTransitProviderTests: XCTestCase {
         let provider = ServerTransitProvider(baseURL: URL(string: "http://commute.local")!, session: session())
 
         do {
-            _ = try await provider.checkHealth()
+            _ = try await provider.departures(fromStation: "san_francisco", toStation: "palo_alto", after: Date(), limit: 1)
             XCTFail("expected badStatus")
         } catch {
             XCTAssertEqual(error as? ServerError, .badStatus(503))
@@ -53,7 +53,7 @@ final class ServerTransitProviderTests: XCTestCase {
 
     func testMissingURLThrows() async {
         do {
-            _ = try await ServerTransitProvider(baseURL: nil).checkHealth()
+            _ = try await ServerTransitProvider(baseURL: nil).departures(fromStation: "san_francisco", toStation: "palo_alto", after: Date(), limit: 1)
             XCTFail("expected invalidURL")
         } catch {
             XCTAssertEqual(error as? ServerError, .invalidURL)
@@ -116,12 +116,8 @@ final class LeaveAlertPlannerTests: XCTestCase {
         profile.homeStationMinutes = 10
         profile.stationSafetyBufferMinutes = 3
         profile.prepLeadTimeMinutes = 20
-        let planner = DefaultPlanner(
-            transit: FixedTransitProvider(departures: [train("103", departs: at(19, 8, 20)), train("105", departs: at(19, 8, 40))]),
-            traffic: nil,
-            calendar: calendar
-        )
-        return (LeaveAlertPlanner(planner: planner, calendar: calendar), profile)
+        let transit = FixedTransitProvider(departures: [train("103", departs: at(19, 8, 20)), train("105", departs: at(19, 8, 40))])
+        return (LeaveAlertPlanner(transit: transit, calendar: calendar), profile)
     }
 
     func testSchedulesGetReadyLeaveAndTooLateForTargetTrain() async {

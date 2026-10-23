@@ -1,38 +1,5 @@
 import SwiftUI
 
-/// Stand-in data for the loading card: a full-size layout (every line included).
-enum Placeholder {
-    static let now = Date(timeIntervalSince1970: 1_800_000_000)
-    static let plan: CommutePlan = {
-        let origin = StationCatalog.all[0]
-        let destination = StationCatalog.all[15]
-        let train = TrainDeparture(
-            tripID: "placeholder",
-            trainNumber: "000",
-            service: .local,
-            scheduledDeparture: now.addingTimeInterval(40 * 60),
-            scheduledArrival: now.addingTimeInterval(80 * 60)
-        )
-        let attempts = AttemptRules.attempts(for: train, accessTime: 600, safetyBuffer: 180, prepLeadTime: 1200)
-        return CommutePlan(
-            generatedAt: now,
-            direction: .homeToWork,
-            originStation: origin,
-            destinationStation: destination,
-            targetLeave: now,
-            accessTime: 600,
-            egressTime: 600,
-            safetyBuffer: 180,
-            prepLeadTime: 1200,
-            train: TrainOption(train: train, attempts: attempts, state: .onTrack, fallback: nil),
-            upcoming: [],
-            transitSource: .timetable,
-            transitFetchedAt: now,
-            car: nil
-        )
-    }()
-}
-
 /// The next-train card: the train, its times and what to do now (leave, on the way, on board…).
 struct HeroCard: View {
     let plan: CommutePlan
@@ -47,7 +14,6 @@ struct HeroCard: View {
     var isOtherDay = false
     /// The loading placeholder shows the "too late for…" line so the sheet is sized for it.
     var reservesMissedLine = false
-    /// Sets a train as the target, from the "better train" hint.
     /// Away from the starting place and not travelling: show this next train without leave guidance.
     var elsewhereTrain: TrainDeparture? = nil
     private var isElsewhere: Bool { elsewhereTrain != nil }
@@ -69,6 +35,7 @@ struct HeroCard: View {
     var onEndTrip: (() -> Void)? = nil
     /// The arrow between the times flips the direction (or swaps the stations).
     var onToggleDirection: (() -> Void)? = nil
+    /// Sets a train as the target, from the "better train" hint.
     var onPick: (TrainDeparture) -> Void = { _ in }
 
     /// "On my way" appears this close to the train, when it is useful and not clutter.
@@ -213,7 +180,6 @@ struct HeroCard: View {
                         .accessibilityIdentifier("leave-countdown")
 
                     // The trip from home or work does not apply when starting from somewhere else; the
-
                     // train after this one does.
                     if isNeutral {
                         Text(followingLine(after: train))
@@ -388,8 +354,8 @@ struct HeroCard: View {
     /// "10 min by 🚲 to 🚆 · 3 min buffer · 🏢 at 9:26 AM"
     private func journeyLine(_ train: TrainDeparture) -> String {
         let arrival = "\(destinationEmoji) at \(Format.time(plan.doorArrival(for: train)))"
+        let mode = profile.accessMode == .bike ? "🚲" : "🚶"
         if hasDeparted && now >= train.departureTime {
-            let mode = profile.accessMode == .bike ? "🚲" : "🚶"
             // Off the train, the line above already gives the door time.
             if now >= train.arrivalTime {
                 return "\(Format.minutes(plan.egressTime)) by \(mode) from \(plan.destinationStation.name)"
@@ -397,7 +363,6 @@ struct HeroCard: View {
             // On board: the line above names the station; only the last leg remains.
             return "Then \(Format.minutes(plan.egressTime)) by \(mode) · \(arrival)"
         }
-        let mode = profile.accessMode == .bike ? "🚲" : "🚶"
         var parts = ["\(Format.minutes(plan.accessTime)) by \(mode) to 🚆"]
         if plan.safetyBuffer >= 60 {
             parts.append("\(Format.minutes(plan.safetyBuffer)) buffer")
@@ -409,7 +374,7 @@ struct HeroCard: View {
     /// Schedule mode: "Then 5:42 PM · Local 147", the train after this one.
     private func followingLine(after train: TrainDeparture) -> String {
         guard let next = plan.upcoming.first(where: {
-            !$0.isCancelled && profile.preferredServices.contains($0.service) && $0.departureTime > train.departureTime
+            $0.isUsable(preferred: profile.preferredServices) && $0.departureTime > train.departureTime
         }) else {
             return "Last train for now"
         }
@@ -417,11 +382,9 @@ struct HeroCard: View {
     }
 
     private var destinationEmoji: String {
-        return plan.direction == .homeToWork ? "🏢" : "🏠"
+        plan.direction == .homeToWork ? "🏢" : "🏠"
     }
 
-    /// While an earlier preferred train is still at the station but out of reach, say so; it
-    /// disappears once that train departs.
     /// The loaded path, if it belongs to the train on the card.
     private func matchingPath(for train: TrainDeparture) -> TrainPath? {
         guard let path, path.trainNumber == train.trainNumber else { return nil }
@@ -452,6 +415,8 @@ struct HeroCard: View {
         return "\(better.service.displayName) \(better.trainNumber) at \(Format.time(better.departureTime)) gets you there \(Format.minutes(saving)) earlier"
     }
 
+    /// While an earlier preferred train is still at the station but out of reach, say so; it
+    /// disappears once that train departs.
     private func missedLine(_ option: TrainOption) -> String? {
         if reservesMissedLine {
             return "Too late for the 0:00 AM train"
@@ -459,7 +424,7 @@ struct HeroCard: View {
         guard !isNeutral, !option.isManual, !hasDeparted else { return nil }
         // Only trains that were the target (or a later replacement), never ones before the target time.
         let missed = plan.upcoming.last {
-            !$0.isCancelled && profile.preferredServices.contains($0.service)
+            $0.isUsable(preferred: profile.preferredServices)
                 && $0.departureTime > now && $0.departureTime < option.train.departureTime
                 && plan.attempts(for: $0).leaveAt >= plan.targetLeave
                 && plan.attempts(for: $0).tooLateAt < now

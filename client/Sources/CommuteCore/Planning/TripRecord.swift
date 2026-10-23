@@ -59,7 +59,7 @@ extension CommutePlan {
     /// the ones a rider already past the station could be on.
     public func runningTrains(preferred: Set<TrainService>, at date: Date) -> [TrainDeparture] {
         enRoute.filter {
-            !$0.isCancelled && preferred.contains($0.service)
+            $0.isUsable(preferred: preferred)
                 && attempts(for: $0).leaveAt >= targetLeave
                 && $0.departureTime <= date && date < $0.arrivalTime
         }

@@ -67,6 +67,11 @@ public struct TrainDeparture: Codable, Equatable, Identifiable, Sendable {
     public var arrivalTime: Date { scheduledArrival.addingTimeInterval(TimeInterval(delaySeconds)) }
     public var delayMinutes: Int { Int((Double(delaySeconds) / 60).rounded()) }
 
+    /// Running, and of a type the rider takes: a train the plan may use.
+    public func isUsable(preferred: Set<TrainService>) -> Bool {
+        !isCancelled && preferred.contains(service)
+    }
+
     public init(
         tripID: String,
         trainNumber: String,

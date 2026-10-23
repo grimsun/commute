@@ -214,66 +214,63 @@ struct UpcomingTrainsCard: View {
         }
     }
 
-    private func row(_ train: TrainDeparture, showsCountdown: Bool) -> some View {
-        let status = RowStatus(train: train, plan: plan, now: now, isElsewhere: isElsewhere)
-        let isTarget = train.id == highlightedID
+    /// What a long-press on a row offers; the same list backs the VoiceOver actions.
+    private struct RowAction: Identifiable {
+        let title: String
+        let symbol: String
+        let perform: () -> Void
+        var id: String { title }
+    }
+
+    private func actions(for train: TrainDeparture, status: RowStatus, isTarget: Bool) -> [RowAction] {
         // One of pin or take per row: pin while there's still time to leave for the train, take
         // once it's time to go (or away from home and work, where there's no leaving to plan).
         let canPin = status == .catchable && !isTarget
             && (onTake == nil || (!isElsewhere && now < plan.attempts(for: train).leaveAt))
-        let canTake = !canPin && canTake(train, isTarget: isTarget)
+        var actions: [RowAction] = []
+        if canPin {
+            actions.append(RowAction(title: "Pin this train", symbol: "pin") { onPick(train) })
+        }
+        if isTarget && plan.train?.isManual == true {
+            actions.append(RowAction(title: "Unpin", symbol: "pin.slash", perform: onClearPick))
+        }
+        if !canPin, let onTake, canTake(train, isTarget: isTarget) {
+            actions.append(RowAction(title: "I’m taking this train", symbol: "tram") { onTake(train) })
+        }
+        if isTarget && isTripInProgress {
+            actions.append(RowAction(title: "I’m not on this train", symbol: "xmark", perform: onEndTrip))
+        }
+        return actions
+    }
+
+    private func row(_ train: TrainDeparture, showsCountdown: Bool) -> some View {
+        let status = RowStatus(train: train, plan: plan, now: now, isElsewhere: isElsewhere)
+        let isTarget = train.id == highlightedID
+        let actions = actions(for: train, status: status, isTarget: isTarget)
         return Button {
             toggleStops(for: train)
         } label: {
             TrainRow(train: train, plan: plan, now: now, status: status, isTarget: isTarget, isTaking: isTarget && isTripInProgress, isElsewhere: isElsewhere, isOtherDay: isOtherDay, showsCountdown: showsCountdown && !isOtherDay, isSkipped: isSkipped(train))
         }
         .buttonStyle(.plain)
-            // The long-press preview lifts the row; give it the card's surface and rounded corners.
-            .background(Palette.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .roundedContextMenuPreview()
-            .contentShape(Rectangle())
-            .contextMenu {
-                if canPin {
-                    Button {
-                        onPick(train)
-                    } label: {
-                        Label("Pin this train", systemImage: "pin")
-                    }
-                }
-                if isTarget && plan.train?.isManual == true {
-                    Button(action: onClearPick) {
-                        Label("Unpin", systemImage: "pin.slash")
-                    }
-                }
-                if canTake, let onTake {
-                    Button {
-                        onTake(train)
-                    } label: {
-                        Label("I’m taking this train", systemImage: "tram")
-                    }
-                }
-                if isTarget && isTripInProgress {
-                    Button(action: onEndTrip) {
-                        Label("I’m not on this train", systemImage: "xmark")
-                    }
+        // The long-press preview lifts the row; give it the card's surface and rounded corners.
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .roundedContextMenuPreview()
+        .contentShape(Rectangle())
+        .contextMenu {
+            ForEach(actions) { action in
+                Button(action: action.perform) {
+                    Label(action.title, systemImage: action.symbol)
                 }
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("schedule-train-\(train.trainNumber)")
-            .accessibilityActions {
-                if canPin {
-                    Button("Pin this train") { onPick(train) }
-                }
-                if isTarget && plan.train?.isManual == true {
-                    Button("Unpin", action: onClearPick)
-                }
-                if canTake, let onTake {
-                    Button("I’m taking this train") { onTake(train) }
-                }
-                if isTarget && isTripInProgress {
-                    Button("I’m not on this train", action: onEndTrip)
-                }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("schedule-train-\(train.trainNumber)")
+        .accessibilityActions {
+            ForEach(actions) { action in
+                Button(action.title, action: action.perform)
             }
+        }
     }
 
     /// Any train not cancelled and not yet at the rider's stop, including one already left

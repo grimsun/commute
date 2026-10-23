@@ -23,6 +23,11 @@ public enum CommuteWindow {
         return time.date(on: tomorrow, calendar: calendar)
     }
 
+    /// The trip in `direction` that `targetLeave` points at.
+    public static func key(for direction: Direction, profile: CommuteProfile, now: Date, calendar: Calendar = .caltrain) -> CommuteKey {
+        CommuteKey(date: targetLeave(for: direction, profile: profile, now: now, calendar: calendar), direction: direction, calendar: calendar)
+    }
+
     /// The trip whose target (or rollover window) comes first: morning until four hours after
     /// the morning target, then evening until four hours after the evening target, then tomorrow morning.
     public static func activeDirection(profile: CommuteProfile, now: Date, calendar: Calendar = .caltrain) -> Direction {

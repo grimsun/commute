@@ -48,12 +48,12 @@ public struct LeaveAlertPlanner: Sendable {
     /// iOS keeps at most 64 pending notifications per app.
     public static let maxAlerts = 60
 
-    private let planner: CommutePlanning
+    private let planner: CommutePlanner
     private let calendar: Calendar
 
-    /// `planner` should not use a traffic provider; car ETAs are irrelevant here.
-    public init(planner: CommutePlanning, calendar: Calendar = .caltrain) {
-        self.planner = planner
+    /// Plans trains only; car times don't matter for alerts.
+    public init(transit: TransitProvider, calendar: Calendar = .caltrain) {
+        self.planner = CommutePlanner(transit: transit, traffic: nil, calendar: calendar)
         self.calendar = calendar
     }
 
@@ -95,8 +95,8 @@ public struct LeaveAlertPlanner: Sendable {
                 commute: key,
                 kind: .getReady,
                 fireDate: attempts.getReadyAt,
-                title: "Get ready: \(trainName) at \(time(train.departureTime))",
-                body: "Leave at \(time(attempts.leaveAt)) to reach \(plan.originStation.name) on time."
+                title: "Get ready: \(trainName) at \(train.departureTime.caltrainTime)",
+                body: "Leave at \(attempts.leaveAt.caltrainTime) to reach \(plan.originStation.name) on time."
             ))
         }
         alerts.append(LeaveAlert(
@@ -104,7 +104,7 @@ public struct LeaveAlertPlanner: Sendable {
             kind: .leaveNow,
             fireDate: attempts.leaveAt,
             title: "Leave now for \(trainName)",
-            body: "Departs \(plan.originStation.name) \(time(train.departureTime)), arrives \(plan.destinationStation.name) \(time(train.arrivalTime))."
+            body: "Departs \(plan.originStation.name) \(train.departureTime.caltrainTime), arrives \(plan.destinationStation.name) \(train.arrivalTime.caltrainTime)."
         ))
         if let next = option.fallback {
             let nextLeave = plan.attempts(for: next).leaveAt
@@ -113,7 +113,7 @@ public struct LeaveAlertPlanner: Sendable {
                 kind: .tooLate,
                 fireDate: attempts.tooLateAt.addingTimeInterval(60),
                 title: "Missed \(trainName)?",
-                body: "Next: \(next.service.displayName) \(next.trainNumber) at \(time(next.departureTime)). Leave by \(time(nextLeave))."
+                body: "Next: \(next.service.displayName) \(next.trainNumber) at \(next.departureTime.caltrainTime). Leave by \(nextLeave.caltrainTime)."
             ))
         }
         return alerts
@@ -122,6 +122,16 @@ public struct LeaveAlertPlanner: Sendable {
     /// Minutes before arrival that "your stop is next" fires.
     public static let arrivingLead: TimeInterval = 3 * 60
 
+    /// "Next stop" alerts for the trips under way, on the train each is taking.
+    public static func arrivingAlerts(trips: TripRecord, plans: [Direction: CommutePlan], preferred: Set<TrainService>, now: Date) -> [LeaveAlert] {
+        trips.departed.compactMap { key in
+            guard let plan = plans[key.direction], plan.key == key,
+                  let train = trips.takenTrain(for: key, in: plan, preferred: preferred, now: now) else { return nil }
+            let alert = arrivingAlert(for: train, destination: plan.destinationStation, key: key)
+            return alert.fireDate > now ? alert : nil
+        }
+    }
+
     /// "Next stop: Palo Alto" shortly before `train` reaches the rider's destination station.
     public static func arrivingAlert(for train: TrainDeparture, destination: Station, key: CommuteKey) -> LeaveAlert {
         LeaveAlert(
@@ -129,11 +139,7 @@ public struct LeaveAlertPlanner: Sendable {
             kind: .arriving,
             fireDate: train.arrivalTime.addingTimeInterval(-arrivingLead),
             title: "Next stop: \(destination.name)",
-            body: "Train \(train.trainNumber) arrives at \(time(train.arrivalTime)). Time to get ready to get off."
+            body: "Train \(train.trainNumber) arrives at \(train.arrivalTime.caltrainTime). Time to get ready to get off."
         )
-    }
-
-    private static func time(_ date: Date) -> String {
-        date.formatted(Date.FormatStyle(date: .omitted, time: .shortened, timeZone: Calendar.caltrain.timeZone))
     }
 }

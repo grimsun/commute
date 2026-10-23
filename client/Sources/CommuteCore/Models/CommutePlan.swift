@@ -132,6 +132,11 @@ public struct CommutePlan: Equatable, Sendable {
         self.car = car
     }
 
+    /// The commute this plan is for.
+    public var key: CommuteKey {
+        CommuteKey(date: targetLeave, direction: direction)
+    }
+
     public func attempts(for train: TrainDeparture) -> AttemptTimes {
         AttemptRules.attempts(
             for: train,
@@ -155,7 +160,7 @@ public struct CommutePlan: Equatable, Sendable {
         let currentLeave = attempts(for: current).leaveAt
         return upcoming
             .filter {
-                $0.id != current.id && !$0.isCancelled && preferred.contains($0.service)
+                $0.id != current.id && $0.isUsable(preferred: preferred)
                     && attempts(for: $0).leaveAt >= currentLeave
                     && $0.arrivalTime <= current.arrivalTime.addingTimeInterval(-Self.betterTrainMinimumGain)
             }

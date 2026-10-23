@@ -20,35 +20,6 @@ extension TrainService {
     }
 }
 
-extension CommuteState {
-    var title: String {
-        switch self {
-        case .onTrack: "On track"
-        case .getReady: "Get ready"
-        case .leaveNow: "Leave now"
-        case .rolledToNextTrain: "Next train"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .onTrack: .green
-        case .getReady: .orange
-        case .leaveNow: .red
-        case .rolledToNextTrain: .indigo
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .onTrack: "checkmark.circle.fill"
-        case .getReady: "figure.walk.motion"
-        case .leaveNow: "exclamationmark.circle.fill"
-        case .rolledToNextTrain: "arrow.uturn.right.circle.fill"
-        }
-    }
-}
-
 extension AccessMode {
     var symbol: String {
         self == .bike ? "bicycle" : "figure.walk"
@@ -67,7 +38,7 @@ extension Direction {
 
 enum Format {
     static func time(_ date: Date) -> String {
-        date.formatted(Date.FormatStyle(date: .omitted, time: .shortened, timeZone: Calendar.caltrain.timeZone))
+        date.caltrainTime
     }
 
     static func day(_ date: Date, relativeTo now: Date) -> String {
@@ -160,7 +131,6 @@ enum Urgency: Hashable {
 
 struct ServiceBadge: View {
     let service: TrainService
-    var tint: Color? = nil
 
     var body: some View {
         Text(service.shortName)
@@ -169,7 +139,7 @@ struct ServiceBadge: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(tint ?? service.color, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .background(service.color, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
             .fixedSize()
     }
 }

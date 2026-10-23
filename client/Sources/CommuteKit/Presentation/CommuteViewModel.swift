@@ -71,12 +71,11 @@ public final class CommuteViewModel {
     private var carEstimates: [Direction: (option: CarOption?, at: Date)] = [:]
     private static let carEstimateLifetime: TimeInterval = 5 * 60
     /// A direction flipped by hand, kept until the current trip changes (see `CommuteWindow`).
-    private var pinnedDirection: (direction: Direction, whileActive: CommuteKey)?
+    private var directionOverride = ManualOverride<Direction, CommuteKey>()
     /// A mode switched by hand, kept while the automatic choice stays the same.
-    private var pinnedMode: (mode: AppMode, whileAutomatic: AppMode)?
-    /// Trains the rider picked this session, per direction; dropped once they can't be caught.
-    private var picks: [Direction: String] = [:]
-    private var pickWindows: [Direction: Date] = [:]
+    private var modeOverride = ManualOverride<AppMode, AppMode>()
+    /// Trains the rider picked this session, by commute; dropped once they can't be caught.
+    private var picks: [CommuteKey: String] = [:]
     private var refreshGeneration = 0
     private var didLoadProfile = false
 
@@ -102,26 +101,7 @@ public final class CommuteViewModel {
     /// The profile behind the card and map: in schedule mode the stations are both ends, with
     /// no travel to them, no buffer, and the next train from now.
     public var routeProfile: CommuteProfile {
-        mode == .schedule ? Self.scheduleProfile(profile, route: scheduleRoute, at: now()) : profile
-    }
-
-    /// Planned as home → work between the chosen stations.
-    private static func scheduleProfile(_ profile: CommuteProfile, route: StationRoute, at date: Date) -> CommuteProfile {
-        var result = profile
-        for (id, keyPath) in [(route.originStationID, \CommuteProfile.home), (route.destinationStationID, \CommuteProfile.work)] {
-            if let station = StationCatalog.station(id: id) {
-                result[keyPath: keyPath] = Place(name: station.name, coordinate: station.coordinate)
-            }
-        }
-        result.homeStationID = route.originStationID
-        result.workStationID = route.destinationStationID
-        result.homeStationMinutes = 0
-        result.workStationMinutes = 0
-        result.stationSafetyBufferMinutes = 0
-        result.prepLeadTimeMinutes = 0
-        result.morningTargetLeave = TimeOfDay(date: date)
-        result.eveningTargetLeave = TimeOfDay(date: date)
-        return result
+        mode == .schedule ? profile.stationToStation(scheduleRoute, at: now()) : profile
     }
 
     public init(
@@ -183,7 +163,7 @@ public final class CommuteViewModel {
         // The launch itself becomes active too; `run()` does that first refresh.
         guard didFinishLaunch else { return }
         if fromBackground {
-            pinnedMode = nil
+            modeOverride.clear()
             scheduleKindChoice = nil
         }
         await loadDepartures()
@@ -198,12 +178,8 @@ public final class CommuteViewModel {
         await updateMode(at: date)
         updateDirection(at: date)
         scheduleDayOffset = await resolveScheduleDayOffset(at: date)
-        for (direction, target) in pickWindows {
-            if target != CommuteWindow.targetLeave(for: direction, profile: profile, now: date) {
-                picks[direction] = nil
-                pickWindows[direction] = nil
-            }
-        }
+        // A pick is for one trip; once the window moves to the next, it no longer applies.
+        picks = picks.filter { key, _ in key == CommuteWindow.key(for: key.direction, profile: profile, now: date) }
 
         // Later requests win; an older response that lands late is dropped.
         refreshGeneration += 1
@@ -230,10 +206,7 @@ public final class CommuteViewModel {
             if newPlans[.schedule]?.train?.isManual != true {
                 schedulePick = nil
             }
-            for (direction, _) in picks where newPlans[.commute(direction)]?.train?.isManual != true {
-                self.picks[direction] = nil
-                pickWindows[direction] = nil
-            }
+            picks = picks.filter { key, _ in newPlans[.commute(key.direction)]?.train?.isManual == true }
         } catch {
             guard generation == refreshGeneration else { return }
             plans = [:]
@@ -306,15 +279,16 @@ public final class CommuteViewModel {
     /// schedule stations. The schedule plan has no car or traffic lookups.
     private func computePlans(at date: Date) async throws -> [PlanKey: CommutePlan] {
         // Trains only; driving estimates are attached from `carEstimates`.
-        let planner = DefaultPlanner(transit: services.transit, traffic: nil)
+        let planner = CommutePlanner(transit: services.transit, traffic: nil)
         let profile = profile
         let picks = picks
         let scheduleDate = Calendar.caltrain.date(byAdding: .day, value: scheduleDayOffset, to: date) ?? date
-        let scheduleProfile = Self.scheduleProfile(profile, route: scheduleRoute, at: scheduleDate)
-        async let toWork = planner.plan(profile: profile, direction: .homeToWork, now: date, pickedTripID: picks[.homeToWork])
-        async let toHome = planner.plan(profile: profile, direction: .workToHome, now: date, pickedTripID: picks[.workToHome])
-        async let schedule = DefaultPlanner(transit: services.transit, traffic: nil)
-            .plan(profile: scheduleProfile, direction: .homeToWork, now: scheduleDate, pickedTripID: schedulePick)
+        let scheduleProfile = profile.stationToStation(scheduleRoute, at: scheduleDate)
+        let toWorkPick = picks.first { $0.key.direction == .homeToWork }?.value
+        let toHomePick = picks.first { $0.key.direction == .workToHome }?.value
+        async let toWork = planner.plan(profile: profile, direction: .homeToWork, now: date, pickedTripID: toWorkPick)
+        async let toHome = planner.plan(profile: profile, direction: .workToHome, now: date, pickedTripID: toHomePick)
+        async let schedule = planner.plan(profile: scheduleProfile, direction: .homeToWork, now: scheduleDate, pickedTripID: schedulePick)
         var plans: [PlanKey: CommutePlan] = [:]
         // Each mode shows its own error; the other mode keeps working.
         switch mode {
@@ -340,7 +314,7 @@ public final class CommuteViewModel {
             carEstimates[direction].map { date.timeIntervalSince($0.at) > Self.carEstimateLifetime || $0.at > date } ?? true
         }
         guard !stale.isEmpty else { return }
-        let planner = DefaultPlanner(transit: services.transit, traffic: traffic)
+        let planner = CommutePlanner(transit: services.transit, traffic: traffic)
         let profile = profile
         // Marked first, so refreshes in the meantime don't ask again.
         for direction in stale {
@@ -407,37 +381,31 @@ public final class CommuteViewModel {
             return
         }
         // Both directions are already planned; just show the other one, crossfading.
+        let active = activeCommute(at: now())
         withAnimation(.smooth(duration: 0.3)) {
             direction = direction.reversed
         }
-        pinnedDirection = (direction, activeCommute(at: now()))
+        directionOverride.set(direction, automatic: active.direction, context: active)
         // "Away" is relative to this direction's starting place.
         await detectDeparture(at: now())
     }
 
     private func updateDirection(at date: Date) {
         let active = activeCommute(at: date)
-        if let pinned = pinnedDirection, pinned.whileActive == active {
-            direction = pinned.direction
-        } else {
-            pinnedDirection = nil
-            direction = active.direction
-        }
+        direction = directionOverride.resolve(automatic: active.direction, context: active)
     }
 
     /// The trip from `CommuteWindow`, unless it is already done (the rider reached the door):
     /// then the next one, e.g. the evening trip once at work.
     private func activeCommute(at date: Date) -> CommuteKey {
         let active = CommuteWindow.activeDirection(profile: profile, now: date)
-        let key = CommuteKey(date: CommuteWindow.targetLeave(for: active, profile: profile, now: date), direction: active)
+        let key = CommuteWindow.key(for: active, profile: profile, now: date)
         guard isFinished(key, at: date) else { return key }
-        let next = active.reversed
-        return CommuteKey(date: CommuteWindow.targetLeave(for: next, profile: profile, now: date), direction: next)
+        return CommuteWindow.key(for: active.reversed, profile: profile, now: date)
     }
 
     private func isFinished(_ key: CommuteKey, at date: Date) -> Bool {
-        guard let plan = plans[.commute(key.direction)],
-              CommuteKey(date: plan.targetLeave, direction: key.direction) == key else { return false }
+        guard let plan = plans[.commute(key.direction)], plan.key == key else { return false }
         return trips.isComplete(key, in: plan, preferred: profile.preferredServices, now: date)
     }
 
@@ -449,7 +417,7 @@ public final class CommuteViewModel {
         guard profile.hasAddresses else { return }
         let automatic = await automaticMode(at: now())
         let newMode = mode.other
-        pinnedMode = newMode == automatic ? nil : (newMode, automatic)
+        modeOverride.set(newMode, automatic: automatic, context: automatic)
         withAnimation(.smooth(duration: 0.3)) {
             mode = newMode
         }
@@ -464,13 +432,7 @@ public final class CommuteViewModel {
 
     private func updateMode(at date: Date) async {
         let automatic = await automaticMode(at: date)
-        let newMode: AppMode
-        if let pinned = pinnedMode, pinned.whileAutomatic == automatic {
-            newMode = pinned.mode
-        } else {
-            pinnedMode = nil
-            newMode = automatic
-        }
+        let newMode = modeOverride.resolve(automatic: automatic, context: automatic)
         guard newMode != mode else { return }
         withAnimation(.smooth(duration: 0.3)) {
             mode = newMode
@@ -530,8 +492,7 @@ public final class CommuteViewModel {
             await refresh()
             return
         }
-        picks[direction] = train.tripID
-        pickWindows[direction] = plan.targetLeave
+        picks[plan.key] = train.tripID
         await refresh()
         await rescheduleAlerts()
     }
@@ -543,8 +504,7 @@ public final class CommuteViewModel {
             await refresh()
             return
         }
-        picks[direction] = nil
-        pickWindows[direction] = nil
+        picks = picks.filter { $0.key.direction != direction }
         await refresh()
         await rescheduleAlerts()
     }
@@ -609,12 +569,18 @@ public final class CommuteViewModel {
 
     /// The trip on screen; late at night that is tomorrow morning's.
     private var currentCommute: CommuteKey {
-        CommuteKey(date: commutePlan?.targetLeave ?? now(), direction: direction)
+        commutePlan?.key ?? CommuteKey(date: now(), direction: direction)
     }
 
     /// The commute direction's plan, in either mode.
     private var commutePlan: CommutePlan? {
         plans[.commute(direction)]
+    }
+
+    private var commutePlans: [Direction: CommutePlan] {
+        Dictionary(uniqueKeysWithValues: Direction.allCases.compactMap { direction in
+            plans[.commute(direction)].map { (direction, $0) }
+        })
     }
 
     /// Starts location (asking once) and checks for departure on every new fix; only when the
@@ -737,14 +703,12 @@ public final class CommuteViewModel {
     private var commuteElsewhereTrain: TrainDeparture? {
         guard isAwayFromStart, let plan = commutePlan, takenTrain(direction: direction, plan: plan) == nil else { return nil }
         let date = now()
-        return plan.upcoming.first {
-            !$0.isCancelled && profile.preferredServices.contains($0.service) && $0.departureTime > date
-        }
+        return plan.upcoming.first { $0.isUsable(preferred: profile.preferredServices) && $0.departureTime > date }
     }
 
     /// The train taken on a departed trip; one rule (`TripRecord`) for the card, map and alerts.
     private func takenTrain(direction: Direction, plan: CommutePlan) -> TrainDeparture? {
-        trips.takenTrain(for: CommuteKey(date: plan.targetLeave, direction: direction), in: plan, preferred: profile.preferredServices, now: now())
+        trips.takenTrain(for: plan.key, in: plan, preferred: profile.preferredServices, now: now())
     }
 
     #if DEBUG
@@ -755,8 +719,7 @@ public final class CommuteViewModel {
     private func applyDebugTrip() async {
         guard let number = debugTripNumber else { return }
         let date = now()
-        let direction = CommuteWindow.activeDirection(profile: profile, now: date)
-        let key = CommuteKey(date: CommuteWindow.targetLeave(for: direction, profile: profile, now: date), direction: direction)
+        let key = CommuteWindow.key(for: CommuteWindow.activeDirection(profile: profile, now: date), profile: profile, now: date)
         if number == "none" {
             await departureLog.clear(key)
         } else if number == "ended" {
@@ -783,26 +746,12 @@ public final class CommuteViewModel {
             await scheduler.replaceAlerts(with: [])
             return
         }
-        let planner = LeaveAlertPlanner(planner: DefaultPlanner(transit: services.transit, traffic: nil))
-        var commutePicks: [CommuteKey: String] = [:]
-        for (direction, tripID) in picks {
-            if let target = pickWindows[direction] {
-                commutePicks[CommuteKey(date: target, direction: direction)] = tripID
-            }
-        }
-        var alerts = await planner.alerts(profile: profile, now: now(), skipping: trips.departed, picks: commutePicks)
-        // On board: a heads-up just before the rider's stop.
         let date = now()
-        for key in trips.departed {
-            guard let plan = plans[.commute(key.direction)], CommuteKey(date: plan.targetLeave, direction: key.direction) == key,
-                  let train = trips.takenTrain(for: key, in: plan, preferred: profile.preferredServices, now: date),
-                  let destination = StationCatalog.station(id: profile.destinationStationID(for: key.direction)) else { continue }
-            let alert = LeaveAlertPlanner.arrivingAlert(for: train, destination: destination, key: key)
-            if alert.fireDate > date {
-                alerts.append(alert)
-            }
-        }
-        await scheduler.replaceAlerts(with: alerts)
+        let leaving = await LeaveAlertPlanner(transit: services.transit)
+            .alerts(profile: profile, now: date, skipping: trips.departed, picks: picks)
+        // On board: a heads-up just before the rider's stop.
+        let arriving = LeaveAlertPlanner.arrivingAlerts(trips: trips, plans: commutePlans, preferred: profile.preferredServices, now: date)
+        await scheduler.replaceAlerts(with: leaving + arriving)
     }
 
     private static func message(for error: Error) -> String {

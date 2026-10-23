@@ -35,8 +35,8 @@ final class CommutePlannerTests: XCTestCase {
         return profile
     }
 
-    private func planner(_ trains: [TrainDeparture], car: TrafficProvider? = nil) -> DefaultPlanner {
-        DefaultPlanner(
+    private func planner(_ trains: [TrainDeparture], car: TrafficProvider? = nil) -> CommutePlanner {
+        CommutePlanner(
             transit: FixedTransitProvider(departures: trains),
             traffic: car,
             calendar: calendar

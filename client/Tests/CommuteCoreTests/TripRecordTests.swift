@@ -43,6 +43,21 @@ final class TripRecordTests: XCTestCase {
         )
     }
 
+    func testArrivingAlertsOnlyForTripsUnderWayOnTheirTrain() {
+        var trips = TripRecord()
+        trips.take("103", for: key)
+        let taken = train("103", departs: at(8, 20))
+        let plans = [Direction.homeToWork: plan(upcoming: [taken], now: at(8, 15))]
+
+        let alerts = LeaveAlertPlanner.arrivingAlerts(trips: trips, plans: plans, preferred: [.local], now: at(8, 15))
+        XCTAssertEqual(alerts.map(\.kind), [.arriving])
+        XCTAssertEqual(alerts.first?.fireDate, taken.arrivalTime.addingTimeInterval(-LeaveAlertPlanner.arrivingLead))
+        XCTAssertEqual(alerts.first?.title, "Next stop: \(StationCatalog.all[15].name)")
+
+        XCTAssertTrue(LeaveAlertPlanner.arrivingAlerts(trips: trips, plans: plans, preferred: [.local], now: at(9, 0)).isEmpty, "past its stop")
+        XCTAssertTrue(LeaveAlertPlanner.arrivingAlerts(trips: TripRecord(), plans: plans, preferred: [.local], now: at(8, 15)).isEmpty, "no trip under way")
+    }
+
     func testTakenTrainComesFromThePlanWithItsDelay() {
         var trips = TripRecord()
         trips.take("103", for: key)

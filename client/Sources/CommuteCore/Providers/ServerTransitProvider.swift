@@ -7,11 +7,6 @@ public enum ServerError: Error, Equatable {
 
 /// Realtime trains from a Commute server. The HTTP contract is documented in `server/README.md`.
 public struct ServerTransitProvider: TransitProvider {
-    public struct Health: Codable, Equatable, Sendable {
-        public var status: String
-        public var version: String?
-    }
-
     struct DeparturesResponse: Codable {
         var fetchedAt: Date
         var departures: [TrainDeparture]
@@ -44,11 +39,6 @@ public struct ServerTransitProvider: TransitProvider {
             source: .live,
             fetchedAt: response.fetchedAt
         )
-    }
-
-    /// Verifies the server is reachable and speaks the expected API.
-    public func checkHealth() async throws -> Health {
-        try await get("v1/health", query: [])
     }
 
     private func get<Response: Decodable>(_ path: String, query: [URLQueryItem]) async throws -> Response {

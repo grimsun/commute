@@ -168,11 +168,6 @@ public struct ScheduleDay: Equatable, Sendable {
         self.holidayName = holidayName
     }
 
-    /// Fits a tight spot: "Weekday schedule", "Weekend schedule", or "Holiday schedule".
-    public var shortLabel: String {
-        holidayName == nil ? "\(kind.rawValue.capitalized) schedule" : "Holiday schedule"
-    }
-
     /// "Weekday schedule", "Weekend schedule", or "Thanksgiving · weekend schedule".
     public var label: String {
         guard let holidayName else { return "\(kind.rawValue.capitalized) schedule" }

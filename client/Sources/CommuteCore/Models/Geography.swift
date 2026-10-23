@@ -44,6 +44,11 @@ public enum Direction: String, Codable, CaseIterable, Sendable {
     public var reversed: Direction {
         self == .homeToWork ? .workToHome : .homeToWork
     }
+
+    /// Where this trip ends: "work" or "home".
+    public var destinationName: String {
+        self == .homeToWork ? "work" : "home"
+    }
 }
 
 /// How the rider gets between a place and its station.
@@ -83,5 +88,12 @@ extension Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/Los_Angeles") ?? .current
         return calendar
+    }
+}
+
+extension Date {
+    /// "8:20 AM", in Caltrain's time zone wherever the phone is.
+    public var caltrainTime: String {
+        formatted(Date.FormatStyle(date: .omitted, time: .shortened, timeZone: Calendar.caltrain.timeZone))
     }
 }

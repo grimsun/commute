@@ -33,6 +33,32 @@ final class ModelTests: XCTestCase {
         XCTAssertTrue(withHome.hasAddresses)
     }
 
+    func testManualOverrideHoldsWhileItsContextLasts() {
+        var override = ManualOverride<AppMode, Int>()
+        override.set(.schedule, automatic: .commute, context: 1)
+        XCTAssertEqual(override.resolve(automatic: .commute, context: 1), .schedule)
+        XCTAssertEqual(override.resolve(automatic: .commute, context: 2), .commute, "context changed")
+        XCTAssertEqual(override.resolve(automatic: .commute, context: 1), .commute, "cleared, not restored")
+
+        override.set(.schedule, automatic: .commute, context: 1)
+        override.set(.commute, automatic: .commute, context: 1)
+        XCTAssertEqual(override.resolve(automatic: .schedule, context: 1), .schedule, "choosing the automatic value clears it")
+    }
+
+    func testStationToStationProfileHasNoTravelOrBuffer() {
+        var profile = CommuteProfile.default
+        profile.homeStationMinutes = 12
+        profile.stationSafetyBufferMinutes = 4
+        let date = Calendar.caltrain.date(from: DateComponents(year: 2026, month: 10, day: 19, hour: 14, minute: 5))!
+        let route = StationRoute(originStationID: "palo_alto", destinationStationID: "hillsdale")
+
+        let schedule = profile.stationToStation(route, at: date)
+        XCTAssertEqual([schedule.homeStationID, schedule.workStationID], ["palo_alto", "hillsdale"])
+        XCTAssertEqual(schedule.home.coordinate, StationCatalog.station(id: "palo_alto")?.coordinate)
+        XCTAssertEqual([schedule.homeStationMinutes, schedule.stationSafetyBufferMinutes, schedule.prepLeadTimeMinutes], [0, 0, 0])
+        XCTAssertEqual(schedule.morningTargetLeave, TimeOfDay(hour: 14, minute: 5))
+    }
+
     func testServerURLValidation() {
         XCTAssertEqual(DataSourceSettings(mode: .server, serverURL: " http://192.168.1.57:8080 ").parsedServerURL?.host, "192.168.1.57")
         XCTAssertNil(DataSourceSettings(mode: .server, serverURL: "not a url").parsedServerURL)

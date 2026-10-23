@@ -110,7 +110,6 @@ final class TimetableTests: XCTestCase {
         XCTAssertEqual(timetable.scheduleDay(for: at(19, 8), calendar: calendar)?.label, "Weekday schedule")
         XCTAssertEqual(timetable.scheduleDay(for: at(24, 8), calendar: calendar)?.label, "Weekend schedule")
         XCTAssertEqual(timetable.scheduleDay(for: at(26, 8, month: 11), calendar: calendar)?.label, "Thanksgiving · weekend schedule")
-        XCTAssertEqual(timetable.scheduleDay(for: at(26, 8, month: 11), calendar: calendar)?.shortLabel, "Holiday schedule")
         XCTAssertEqual(timetable.platformStations["70012"], "san_francisco")
         XCTAssertNil(timetable.scheduleDay(for: calendar.date(from: DateComponents(year: 2027, month: 3, day: 1))!, calendar: calendar), "no service after the feed ends")
     }

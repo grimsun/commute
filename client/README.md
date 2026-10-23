@@ -28,14 +28,14 @@ services when the data source changes.
 
 - `Sources/CommuteCore/`: Foundation-only, tested on macOS
   - `Models/`: stations (Caltrain GTFS ids), train types, profile, data-source settings, plan
-  - `Planning/`: `DefaultPlanner` (train + get ready / leave / too late), `CommuteWindow` (which trip and mode is current), `TripRecord` (trips under way, their train, when they're over), `DepartureDetection`, `LeaveAlertPlanner`
+  - `Planning/`: `CommutePlanner` (train + get ready / leave / too late), `CommuteWindow` (which trip and mode is current), `ManualOverride` (a mode or direction switched by hand, until the automatic one changes), `TripRecord` (trips under way, their train, when they're over), `DepartureDetection`, `LeaveAlertPlanner`
   - `Timetable/`: ZIP reader, CSV and GTFS parsing, `Timetable` queries, `TimetableStore` (memory + disk cache, download on first use)
   - `Providers/`: provider protocols, timetable / server / fallback providers, `CommuteServices` factory, fixed and sample providers for tests and previews
   - `Storage/`: profile persistence, the trip log behind `TripRecord`
 - `Sources/CommuteKit/`: Apple-platform layer, re-exports `CommuteCore`
   - `MapKit/`: car ETAs and travel-time estimates from Apple Maps
   - `Notifications/`: local leave alerts
-  - `Presentation/`: `CommuteViewModel`, the map, the bottom sheet (`PlanPanel` with `HeroCard`, `UpcomingTrainsCard`, `StopList`, `CarCard`), settings, address search
+  - `Presentation/`: `CommuteViewModel`, the map, the map controls, the bottom sheet (`PlanPanel` with `HeroCard`, `UpcomingTrainsCard`, `StopList`, `CarCard`; `ChangeSchedule` paces its redraws), settings, address search
 - `Tests/CommuteCoreTests/`: planner, timetable (with a miniature GTFS fixture), services, alerts
 - `CommuteApp/`: the Xcode app target; `CommuteAppApp.swift` wires the implementations
 - `CommuteApp/CommuteWidgets/`: widget extension with the Lock Screen / Dynamic Island Live Activity

@@ -69,7 +69,7 @@ public struct LiveTrip: Codable, Hashable, Sendable {
             phase: phase,
             originName: plan.originStation.name,
             destinationName: plan.destinationStation.name,
-            destinationPlace: plan.direction == .homeToWork ? "work" : "home",
+            destinationPlace: plan.direction.destinationName,
             trainNumber: train.trainNumber,
             serviceName: train.service.displayName,
             leaveAt: attempts.leaveAt,
