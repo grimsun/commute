@@ -55,20 +55,26 @@ public struct TrainPath: Equatable, Sendable {
     /// Where the train should be at `date`, shifted by `delay`; `nil` before it starts or after it ends.
     public func position(at date: Date, delay: TimeInterval = 0) -> TrainPosition? {
         let time = date.addingTimeInterval(-delay)
+        guard let distance = distance(at: time) else { return nil }
+        let dwelling = stops.first { time >= $0.arrival && time <= $0.departure }
+        return TrainPosition(coordinate: point(at: distance), heading: heading(at: distance), stationID: dwelling?.stationID)
+    }
+
+    /// How far along the track the train is at `time` (already shifted by any delay).
+    private func distance(at time: Date) -> Double? {
         guard let first = stops.first, let last = stops.last,
               time >= first.departure, time <= last.arrival else { return nil }
 
         for index in stops.indices {
             let stop = stops[index]
             if time >= stop.arrival && time <= stop.departure {
-                return TrainPosition(coordinate: point(at: stop.distance), heading: heading(at: stop.distance), stationID: stop.stationID)
+                return stop.distance
             }
             if index + 1 < stops.count {
                 let next = stops[index + 1]
                 if time > stop.departure && time < next.arrival {
                     let fraction = time.timeIntervalSince(stop.departure) / next.arrival.timeIntervalSince(stop.departure)
-                    let distance = stop.distance + (next.distance - stop.distance) * fraction
-                    return TrainPosition(coordinate: point(at: distance), heading: heading(at: distance), stationID: nil)
+                    return stop.distance + (next.distance - stop.distance) * fraction
                 }
             }
         }
@@ -78,8 +84,20 @@ public struct TrainPath: Equatable, Sendable {
     /// The track between two of this train's stations, for drawing the ride.
     public func line(from originID: String, to destinationID: String) -> [Coordinate] {
         guard let from = stops.first(where: { $0.stationID == originID })?.distance,
-              let to = stops.last(where: { $0.stationID == destinationID })?.distance,
-              from < to else { return [] }
+              let to = stops.last(where: { $0.stationID == destinationID })?.distance else { return [] }
+        return section(from: from, to: to)
+    }
+
+    /// The track the train still covers before reaching `stationID`, from where it is now. Empty
+    /// before it starts and once it has reached the station.
+    public func approach(to stationID: String, at date: Date, delay: TimeInterval = 0) -> [Coordinate] {
+        guard let target = stops.first(where: { $0.stationID == stationID })?.distance,
+              let current = distance(at: date.addingTimeInterval(-delay)) else { return [] }
+        return section(from: current, to: target)
+    }
+
+    private func section(from: Double, to: Double) -> [Coordinate] {
+        guard from < to else { return [] }
         let inside = line.indices.filter { cumulative[$0] > from && cumulative[$0] < to }.map { line[$0] }
         return [point(at: from)] + inside + [point(at: to)]
     }

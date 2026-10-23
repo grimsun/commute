@@ -173,6 +173,18 @@ final class TimetableTests: XCTestCase {
         XCTAssertEqual(line.first?.latitude ?? 0, StationCatalog.station(id: "san_francisco")!.coordinate.latitude, accuracy: 1e-6)
     }
 
+    func testTrainPathApproachToAStation() throws {
+        let timetable = try Self.fixtureTimetable()
+        let departure = try XCTUnwrap(timetable.departures(from: "san_francisco", to: "palo_alto", after: at(19, 7), limit: 1, calendar: calendar).first)
+        let path = try XCTUnwrap(timetable.path(for: departure, calendar: calendar))
+
+        let approach = path.approach(to: "palo_alto", at: at(19, 8, 10))
+        XCTAssertEqual(try XCTUnwrap(approach.first), try XCTUnwrap(path.position(at: at(19, 8, 10))).coordinate, accuracy: 1e-9)
+        XCTAssertEqual(approach.last?.latitude ?? 0, StationCatalog.station(id: "palo_alto")!.coordinate.latitude, accuracy: 0.01)
+        XCTAssertEqual(path.approach(to: "san_francisco", at: at(19, 8, 10)), [], "already past it")
+        XCTAssertEqual(path.approach(to: "palo_alto", at: at(19, 7, 59)), [], "not started")
+    }
+
     // MARK: Store
 
     func testStoreDownloadsOnceThenUsesMemoryAndDisk() async throws {
