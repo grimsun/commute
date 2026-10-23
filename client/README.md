@@ -42,6 +42,9 @@ services when the data source changes.
 
 ## Planning rules
 
+- Commute needs both home and work addresses (Settings → Places). Without them the app shows only Schedule,
+  with a notice under the card; tapping Commute explains why. Alerts and the Lock Screen countdown stay off
+  until both are set. The map draws home and work only for addresses away from their stations.
 - Travel times are minutes you set per place (door ↔ platform), with an Apple Maps estimate to start from.
 - Target train: the first train of a preferred type you catch, with the safety buffer, when leaving at
   the target time (morning: leave home; evening: leave work).

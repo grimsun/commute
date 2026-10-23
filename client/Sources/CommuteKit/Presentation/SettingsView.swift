@@ -107,9 +107,15 @@ struct SettingsView: View {
     // MARK: Places
 
     private var placesSection: some View {
-        Section("Places") {
+        Section {
             placeLink(title: "Home", symbol: "house.fill", place: $draft.home, stationID: $draft.homeStationID)
             placeLink(title: "Work", symbol: "briefcase.fill", place: $draft.work, stationID: $draft.workStationID)
+        } header: {
+            Text("Places")
+        } footer: {
+            if !draft.hasAddresses {
+                Text("Add both to turn on Commute mode: when to leave, leave reminders and the Lock Screen countdown. Until then, the app shows the schedule.")
+            }
         }
     }
 
@@ -121,7 +127,7 @@ struct SettingsView: View {
             }
         } label: {
             LabeledContent {
-                Text(place.wrappedValue.name)
+                Text(place.wrappedValue.isSet ? place.wrappedValue.name : "Add address")
                     .lineLimit(1)
             } label: {
                 Label(title, systemImage: symbol)
@@ -234,12 +240,18 @@ struct SettingsView: View {
     private var alertsSection: some View {
         Section {
             Toggle("Lock Screen countdown", isOn: $draft.liveActivityEnabled)
+                .disabled(!draft.hasAddresses)
             Toggle("Get ready & leave now alerts", isOn: $draft.leaveAlertsEnabled)
+                .disabled(!draft.hasAddresses)
         } header: {
             Text("Notifications")
         } footer: {
-            Text("Scheduled a week ahead from the timetable, so they arrive even if the app stays closed. They can’t follow delays. With location access, a trip’s remaining alerts stop once you’ve left.")
+            Text(draft.hasAddresses ? alertsFooter : "Add your home and work addresses under Places to get leave reminders and the Lock Screen countdown.")
         }
+    }
+
+    private var alertsFooter: String {
+        "Scheduled a week ahead from the timetable, so they arrive even if the app stays closed. They can’t follow delays. With location access, a trip’s remaining alerts stop once you’ve left."
     }
 
     private var locationSection: some View {

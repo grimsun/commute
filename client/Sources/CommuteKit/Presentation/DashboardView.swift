@@ -10,6 +10,8 @@ public struct DashboardView: View {
     @State private var viewModel: CommuteViewModel
     @Environment(\.scenePhase) private var scenePhase
     @State private var isSettingsPresented = false
+    /// Commute was tapped without home and work addresses.
+    @State private var isAddressPromptPresented = false
     @State private var panel: PanelSize = .collapsed
     private var isExpanded: Bool { panel == .expanded }
     /// Applied once loaded: the sheet settles at its first detent while it is being presented.
@@ -115,9 +117,11 @@ public struct DashboardView: View {
         .ignoresSafeArea()
         .overlay(alignment: .top) {
             // A separate view, so refresh progress redraws only the buttons, not the map.
-            MapControls(viewModel: viewModel) {
+            MapControls(viewModel: viewModel, onModeChange: {
                 recenterRequest += 1
-            }
+            }, onNeedsAddresses: {
+                isAddressPromptPresented = true
+            })
             .padding(.horizontal, 16)
             .padding(.top, 4)
         }
@@ -144,6 +148,15 @@ public struct DashboardView: View {
             .sheet(isPresented: $isSettingsPresented) {
                 SettingsView(viewModel: viewModel)
             }
+            // On the sheet, since the map can't present while the sheet is up.
+            .alert("Add your home and work", isPresented: $isAddressPromptPresented) {
+                Button("Open Settings") {
+                    isSettingsPresented = true
+                }
+                Button("Not Now", role: .cancel) {}
+            } message: {
+                Text("Commute mode tells you when to leave and reminds you before your train. It needs your home and work addresses; until then, the app shows the schedule.")
+            }
         }
         .task {
             await viewModel.run()
@@ -159,6 +172,12 @@ public struct DashboardView: View {
             }
             if showsSettingsOnLaunch {
                 isSettingsPresented = true
+            }
+        }
+        // The address notice comes or goes, so the card's height changes.
+        .onChange(of: viewModel.hasAddresses) { _, _ in
+            if panel == .collapsed {
+                allowRefit()
             }
         }
         .onChange(of: panel) { previous, current in
@@ -190,10 +209,15 @@ private struct BelowMapControls: CustomPresentationDetent {
 private struct MapControls: View {
     let viewModel: CommuteViewModel
     let onModeChange: () -> Void
+    let onNeedsAddresses: () -> Void
 
     var body: some View {
         HStack {
             Button {
+                guard viewModel.hasAddresses else {
+                    onNeedsAddresses()
+                    return
+                }
                 onModeChange()
                 Task { await viewModel.toggleMode() }
             } label: {

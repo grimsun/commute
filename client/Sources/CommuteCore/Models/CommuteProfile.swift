@@ -125,11 +125,27 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
     }
 
     public static let `default` = CommuteProfile(
-        home: Place(name: "San Francisco Caltrain", coordinate: Coordinate(latitude: 37.7764, longitude: -122.3946)),
-        work: Place(name: "Palo Alto Caltrain", coordinate: Coordinate(latitude: 37.4436, longitude: -122.1651)),
+        home: .unset,
+        work: .unset,
         homeStationID: "san_francisco",
         workStationID: "palo_alto"
     )
+
+    /// Commute mode, its alerts and the Lock Screen countdown need both addresses; without them
+    /// the app only shows the schedule.
+    public var hasAddresses: Bool {
+        home.isSet && work.isSet
+    }
+
+    /// The station stand-ins earlier versions saved before an address was given.
+    private static let legacyPlaceholders: Set<Place> = [
+        Place(name: "San Francisco Caltrain", coordinate: Coordinate(latitude: 37.7764, longitude: -122.3946)),
+        Place(name: "Palo Alto Caltrain", coordinate: Coordinate(latitude: 37.4436, longitude: -122.1651))
+    ]
+
+    private static func address(_ place: Place?) -> Place? {
+        place.map { legacyPlaceholders.contains($0) ? .unset : $0 }
+    }
 
     public func origin(for direction: Direction) -> Place {
         direction == .homeToWork ? home : work
@@ -172,8 +188,8 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = CommuteProfile.default
-        home = try c.decodeIfPresent(Place.self, forKey: .home) ?? d.home
-        work = try c.decodeIfPresent(Place.self, forKey: .work) ?? d.work
+        home = try Self.address(c.decodeIfPresent(Place.self, forKey: .home)) ?? d.home
+        work = try Self.address(c.decodeIfPresent(Place.self, forKey: .work)) ?? d.work
         homeStationID = try c.decodeIfPresent(String.self, forKey: .homeStationID) ?? d.homeStationID
         workStationID = try c.decodeIfPresent(String.self, forKey: .workStationID) ?? d.workStationID
         accessMode = try c.decodeIfPresent(AccessMode.self, forKey: .accessMode) ?? d.accessMode

@@ -19,6 +19,20 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(profile.dataSource.mode, .standalone)
     }
 
+    func testAddressesStartUnsetAndOldStationPlaceholdersCountAsUnset() throws {
+        XCTAssertFalse(CommuteProfile.default.hasAddresses)
+
+        let json = #"{"home":{"name":"San Francisco Caltrain","coordinate":{"latitude":37.7764,"longitude":-122.3946}},"work":{"name":"Stanford","coordinate":{"latitude":37.4275,"longitude":-122.1697}}}"#
+        let profile = try JSONDecoder().decode(CommuteProfile.self, from: Data(json.utf8))
+        XCTAssertFalse(profile.home.isSet)
+        XCTAssertEqual(profile.work.name, "Stanford")
+        XCTAssertFalse(profile.hasAddresses)
+
+        var withHome = profile
+        withHome.home = Place(name: "Masonic", coordinate: Coordinate(latitude: 37.7912, longitude: -122.4130))
+        XCTAssertTrue(withHome.hasAddresses)
+    }
+
     func testServerURLValidation() {
         XCTAssertEqual(DataSourceSettings(mode: .server, serverURL: " http://192.168.1.57:8080 ").parsedServerURL?.host, "192.168.1.57")
         XCTAssertNil(DataSourceSettings(mode: .server, serverURL: "not a url").parsedServerURL)

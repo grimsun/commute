@@ -80,6 +80,9 @@ public final class CommuteViewModel {
     private var refreshGeneration = 0
     private var didLoadProfile = false
 
+    /// Without home and work addresses there is no commute to plan: schedule only, no alerts.
+    public var hasAddresses: Bool { profile.hasAddresses }
+
     /// Schedule mode's stations: the last ones looked up, else the current commute's.
     public var scheduleRoute: StationRoute {
         profile.scheduleRoute ?? StationRoute(
@@ -263,7 +266,7 @@ public final class CommuteViewModel {
         guard let liveActivity else { return }
         let date = now()
         var trip: LiveTrip?
-        if profile.liveActivityEnabled {
+        if profile.liveActivityEnabled, profile.hasAddresses {
             let active = activeCommute(at: date).direction
             let taken = plans[.commute(active)].flatMap { takenTrain(direction: active, plan: $0) }
             // Away and not travelling: a "leave in" countdown would be wrong, so none.
@@ -443,6 +446,7 @@ public final class CommuteViewModel {
     /// Switches between commute and schedule; the choice holds until the automatic one changes
     /// (the commute window opens or closes) or the app comes back from the background.
     public func toggleMode() async {
+        guard profile.hasAddresses else { return }
         let automatic = await automaticMode(at: now())
         let newMode = mode.other
         pinnedMode = newMode == automatic ? nil : (newMode, automatic)
@@ -453,6 +457,7 @@ public final class CommuteViewModel {
     }
 
     private func automaticMode(at date: Date) async -> AppMode {
+        guard profile.hasAddresses else { return .schedule }
         let isHoliday = await timetable.scheduleDay(for: date)?.holidayName != nil
         return CommuteWindow.isCommuteTime(profile: profile, now: date, isHoliday: isHoliday) ? .commute : .schedule
     }
@@ -774,7 +779,7 @@ public final class CommuteViewModel {
     private func rescheduleAlerts() async {
         let scheduler = services.alerts
         guard scheduler.schedulesOnDevice else { return }
-        guard profile.leaveAlertsEnabled else {
+        guard profile.leaveAlertsEnabled, profile.hasAddresses else {
             await scheduler.replaceAlerts(with: [])
             return
         }

@@ -21,9 +21,11 @@ final class CommutePlannerTests: XCTestCase {
         )
     }
 
-    /// Target 8:00, 10 min home ↔ station, 15 min work ↔ station, 3 min buffer, 20 min prep.
+    /// Addresses in SF and Stanford, target 8:00, 10 min home ↔ station, 15 min work ↔ station, 3 min buffer, 20 min prep.
     private func profile(services: Set<TrainService> = Set(TrainService.allCases)) -> CommuteProfile {
         var profile = CommuteProfile.default
+        profile.home = Place(name: "Home", coordinate: Coordinate(latitude: 37.7912, longitude: -122.4130))
+        profile.work = Place(name: "Work", coordinate: Coordinate(latitude: 37.4275, longitude: -122.1697))
         profile.morningTargetLeave = TimeOfDay(hour: 8, minute: 0)
         profile.homeStationMinutes = 10
         profile.workStationMinutes = 15

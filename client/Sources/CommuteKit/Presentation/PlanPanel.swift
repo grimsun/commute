@@ -65,6 +65,7 @@ struct PlanPanel: View {
         let isDownloading = viewModel.timetableInfo == nil
         let isSchedule = viewModel.mode == .schedule
         let isOtherDay = isSchedule && viewModel.scheduleDayOffset != 0
+        let needsAddresses = viewModel.isLoaded && !viewModel.hasAddresses
         return ScrollViewReader { scroller in
             ScrollView {
                 SwiftUI.TimelineView(tickSchedule(plan: plan, path: trainPath)) { _ in
@@ -94,6 +95,9 @@ struct PlanPanel: View {
                                 }
                             } else {
                                 loadingCard(errorMessage: errorMessage, isDownloading: isDownloading)
+                            }
+                            if needsAddresses && !isCompact {
+                                addressesNotice
                             }
                         }
                         // Compact has no header, so the card keeps clear of the grabber itself.
@@ -170,6 +174,34 @@ struct PlanPanel: View {
                 }
             }
         }
+    }
+
+    /// Without home and work only the schedule shows; this says what adding them brings.
+    private var addressesNotice: some View {
+        Button(action: onOpenSettings) {
+            HStack(spacing: 12) {
+                Image(systemName: "bell.badge.fill")
+                    .font(.title3)
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Add your home and work")
+                        .font(.subheadline.weight(.semibold))
+                    Text("To get leave reminders and plan your commute door to door.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens Settings")
     }
 
     // MARK: Header

@@ -30,6 +30,11 @@ public struct Place: Codable, Hashable, Sendable {
         self.name = name
         self.coordinate = coordinate
     }
+
+    /// No address given yet.
+    public static let unset = Place(name: "", coordinate: nil)
+
+    public var isSet: Bool { coordinate != nil }
 }
 
 public enum Direction: String, Codable, CaseIterable, Sendable {
