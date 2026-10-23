@@ -25,9 +25,6 @@ struct CommuteMapView: View {
 
     @State private var position: MapCameraPosition = .automatic
     @State private var trainPosition: TrainPosition?
-    /// Track from the train to the rider's station while it is still on its way there, so the
-    /// marker sits on a line rather than off the drawn ride.
-    @State private var approachLine: [CLLocationCoordinate2D] = []
 
     private var homeStation: Station? { StationCatalog.station(id: profile.homeStationID) }
     private var workStation: Station? { StationCatalog.station(id: profile.workStationID) }
@@ -42,10 +39,9 @@ struct CommuteMapView: View {
 
     var body: some View {
         Map(position: $position) {
-            if approachLine.count >= 2 {
-                MapPolyline(coordinates: approachLine)
-                    .stroke(Color.red.opacity(0.3), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
-            }
+            // The train's whole run, faint, so it is on a line before and after the ride.
+            MapPolyline(coordinates: fullLine)
+                .stroke(Color.red.opacity(0.3), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
             if let railLine {
                 MapPolyline(coordinates: railLine)
                     .stroke(Color.red.opacity(0.85), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
@@ -81,13 +77,10 @@ struct CommuteMapView: View {
         // Moves the train once a second; small steps read as gliding at map scale.
         .task(id: "\(trainPath?.tripID ?? "")|\(isVisible)") {
             while isVisible && !Task.isCancelled {
-                let date = now()
-                let next = trainPath?.position(at: date, delay: trainDelay)
-                let approach = trainPath?.approach(to: originStationID, at: date, delay: trainDelay) ?? []
+                let next = trainPath?.position(at: now(), delay: trainDelay)
                 withAnimation(.linear(duration: 1)) {
                     trainPosition = next
                 }
-                approachLine = approach.map(\.clLocationCoordinate)
                 try? await Task.sleep(for: .seconds(1))
             }
         }
@@ -126,6 +119,12 @@ struct CommuteMapView: View {
             pins.append(Pin(id: station.id, title: station.name, coordinate: station.coordinate, symbol: "tram.fill", color: .red))
         }
         return pins
+    }
+
+    /// The card's train from end to end, else the whole line through every station.
+    private var fullLine: [CLLocationCoordinate2D] {
+        let track = trainPath?.line ?? []
+        return (track.count >= 2 ? track : StationCatalog.all.map(\.coordinate)).map(\.clLocationCoordinate)
     }
 
     /// The ride along the real track when the train's path is known, else through the stations.

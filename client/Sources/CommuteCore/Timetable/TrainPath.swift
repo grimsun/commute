@@ -88,14 +88,6 @@ public struct TrainPath: Equatable, Sendable {
         return section(from: from, to: to)
     }
 
-    /// The track the train still covers before reaching `stationID`, from where it is now. Empty
-    /// before it starts and once it has reached the station.
-    public func approach(to stationID: String, at date: Date, delay: TimeInterval = 0) -> [Coordinate] {
-        guard let target = stops.first(where: { $0.stationID == stationID })?.distance,
-              let current = distance(at: date.addingTimeInterval(-delay)) else { return [] }
-        return section(from: current, to: target)
-    }
-
     private func section(from: Double, to: Double) -> [Coordinate] {
         guard from < to else { return [] }
         let inside = line.indices.filter { cumulative[$0] > from && cumulative[$0] < to }.map { line[$0] }
