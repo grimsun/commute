@@ -1,14 +1,45 @@
 import SwiftUI
 
-/// Driving instead: the current car time against free-flow traffic.
+/// Driving instead: the current car time against free-flow traffic. Tap for directions in
+/// Apple Maps; touch and hold to choose Google Maps.
 struct CarCard: View {
     let plan: CommutePlan
     let preferred: Set<TrainService>
     let now: Date
+    /// Door to door by car; `nil` hides the maps actions.
+    var directions: DrivingDirections? = nil
+
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
+        if let directions, plan.car != nil {
+            Button {
+                openURL(directions.appleMapsURL)
+            } label: {
+                card(showsLink: true)
+            }
+            .buttonStyle(.plain)
+            .contextMenu {
+                Button {
+                    openURL(directions.appleMapsURL)
+                } label: {
+                    Label("Open in Apple Maps", systemImage: "map")
+                }
+                Button {
+                    openURL(directions.googleMapsURL)
+                } label: {
+                    Label("Open in Google Maps", systemImage: "arrow.up.right.square")
+                }
+            }
+            .accessibilityHint("Opens driving directions in Apple Maps")
+        } else {
+            card(showsLink: false)
+        }
+    }
+
+    private func card(showsLink: Bool) -> some View {
         Card {
-            HStack(alignment: .center, spacing: 14) {
+            HStack(alignment: .center, spacing: 12) {
                 Image(systemName: "car.fill")
                     .font(.title2)
                     .foregroundStyle(.secondary)
@@ -29,10 +60,13 @@ struct CarCard: View {
                             Text(car.isTrafficGood ? "Light traffic" : "Heavy traffic · +\(Format.minutes(car.delay))")
                                 .font(.subheadline)
                                 .foregroundStyle(car.isTrafficGood ? .green : .orange)
+                                // The traffic is the point; the train time scales down instead.
+                                .fixedSize()
                             // Leaving now either way, so the train that gets there first, not the planned one.
                             if let arrival = plan.earliestDoorArrival(preferred: preferred, at: now) {
                                 Text("By train earliest \(Format.time(arrival))")
                                     .font(.caption)
+                                    .minimumScaleFactor(0.7)
                                     .foregroundStyle(.secondary)
                                     .monospacedDigit()
                                     .frame(maxWidth: .infinity, alignment: .trailing)
@@ -46,7 +80,13 @@ struct CarCard: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+                if showsLink {
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
+        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
