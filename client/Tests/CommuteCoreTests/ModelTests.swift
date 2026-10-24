@@ -59,6 +59,18 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(schedule.morningTargetLeave, TimeOfDay(hour: 14, minute: 5))
     }
 
+    func testDrivingDirectionsLinks() throws {
+        let home = Place(name: "Home", coordinate: Coordinate(latitude: 37.7912, longitude: -122.413))
+        let work = Place(name: "Work", coordinate: Coordinate(latitude: 37.4275, longitude: -122.1697))
+        let directions = try XCTUnwrap(DrivingDirections(from: work, to: home))
+
+        XCTAssertEqual(directions.appleMapsURL.absoluteString,
+                       "https://maps.apple.com/?saddr=37.427500,-122.169700&daddr=37.791200,-122.413000&dirflg=d")
+        XCTAssertEqual(directions.googleMapsURL.absoluteString,
+                       "https://www.google.com/maps/dir/?api=1&origin=37.427500,-122.169700&destination=37.791200,-122.413000&travelmode=driving")
+        XCTAssertNil(DrivingDirections(from: .unset, to: home), "needs both addresses")
+    }
+
     func testServerURLValidation() {
         XCTAssertEqual(DataSourceSettings(mode: .server, serverURL: " http://192.168.1.57:8080 ").parsedServerURL?.host, "192.168.1.57")
         XCTAssertNil(DataSourceSettings(mode: .server, serverURL: "not a url").parsedServerURL)
