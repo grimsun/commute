@@ -3,6 +3,7 @@ import SwiftUI
 /// Driving instead: the current car time against free-flow traffic.
 struct CarCard: View {
     let plan: CommutePlan
+    let preferred: Set<TrainService>
     let now: Date
 
     var body: some View {
@@ -28,8 +29,9 @@ struct CarCard: View {
                             Text(car.isTrafficGood ? "Light traffic" : "Heavy traffic · +\(Format.minutes(car.delay))")
                                 .font(.subheadline)
                                 .foregroundStyle(car.isTrafficGood ? .green : .orange)
-                            if let train = plan.train?.train {
-                                Text("By train \(Format.time(plan.doorArrival(for: train)))")
+                            // Leaving now either way, so the train that gets there first, not the planned one.
+                            if let arrival = plan.earliestDoorArrival(preferred: preferred, at: now) {
+                                Text("By train earliest \(Format.time(arrival))")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .monospacedDigit()

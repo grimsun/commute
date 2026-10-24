@@ -145,7 +145,7 @@ struct PlanPanel: View {
                             )
                             // Driving is moot once you're on your way, and between two stations.
                             if tripInProgress == nil && !isSchedule {
-                                CarCard(plan: plan, now: now)
+                                CarCard(plan: plan, preferred: routeProfile.preferredServices, now: now)
                             }
                             footer(plan: plan)
                             }

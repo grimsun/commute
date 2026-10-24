@@ -251,6 +251,17 @@ final class CommutePlannerTests: XCTestCase {
         XCTAssertNil(plan.betterTrain(than: express, preferred: [.local, .express]), "nothing beats it without leaving earlier")
     }
 
+    func testEarliestDoorArrivalPrefersTheFastestCatchableTrain() async throws {
+        let local = train("103", departs: at(8, 20))
+        var express = train("505", departs: at(8, 30), service: .express)
+        express.scheduledArrival = at(8, 50)
+        let plan = try await planner([train("101", departs: at(8, 5)), local, express]).plan(profile: profile(), direction: .homeToWork, now: at(8, 0))
+
+        // 8:05 is already too late (10 min to the station); the express beats the 8:20 local.
+        XCTAssertEqual(plan.earliestDoorArrival(preferred: [.local, .express], at: at(8, 0)), at(8, 50).addingTimeInterval(15 * 60))
+        XCTAssertEqual(plan.earliestDoorArrival(preferred: [.local], at: at(8, 0)), local.arrivalTime.addingTimeInterval(15 * 60))
+    }
+
     func testSameStationIsRejected() async {
         var profile = profile()
         profile.workStationID = profile.homeStationID
