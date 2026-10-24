@@ -107,9 +107,9 @@ struct PlanPanel: View {
                             onCollapsedHeightChange(height, plan == nil)
                         }
 
-                        // Collapsed, only the header and card show: nothing peeks in under them, and
-                        // the list isn't laid out every second while it can't be seen.
-                        if let plan, isExpanded {
+                        // Always laid out, below the fitted card, so dragging the sheet up shows the
+                        // list under the finger rather than an empty sheet until it settles.
+                        if let plan {
                             Group {
                             if let notice = plan.transitNotice {
                                 Card {
