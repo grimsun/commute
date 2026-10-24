@@ -30,6 +30,14 @@ public enum DepartureDetection {
     /// Margin past the station that can only be explained by riding a train.
     public static let beyondStationMargin: Double = 1500
 
+    /// How close the phone must be to where the timetable puts a train to count as riding it.
+    public static let onTrainRadius: Double = 1500
+
+    /// Near enough to a running train's position to be on it.
+    public static func isOnTrain(at position: Coordinate, fix: LocationFix) -> Bool {
+        position.distance(to: fix.coordinate) <= onTrainRadius + max(0, fix.accuracy)
+    }
+
     /// Farther from the starting place than its station is, by a clear margin: on a train, not on the way.
     public static func isBeyondStation(origin: Coordinate, station: Coordinate, fix: LocationFix) -> Bool {
         origin.distance(to: fix.coordinate) > origin.distance(to: station) + beyondStationMargin + max(0, fix.accuracy)

@@ -264,6 +264,12 @@ final class DepartureDetectionTests: XCTestCase {
         XCTAssertFalse(DepartureDetection.hasLeft(origin: home, fix: fix(metersNorth: 400, accuracy: 300), targetLeave: target, trainDeparture: train, now: target))
     }
 
+    func testOnTrainOnlyNearTheTrain() {
+        XCTAssertTrue(DepartureDetection.isOnTrain(at: home, fix: fix(metersNorth: 800)))
+        XCTAssertFalse(DepartureDetection.isOnTrain(at: home, fix: fix(metersNorth: 5000)), "far from where the train is")
+        XCTAssertTrue(DepartureDetection.isOnTrain(at: home, fix: fix(metersNorth: 1800, accuracy: 500)), "a vague fix gets its uncertainty")
+    }
+
     func testBeyondStationMeansOnATrain() {
         let station = Coordinate(latitude: home.latitude + 1000 / 111_000, longitude: home.longitude) // 1 km away
         XCTAssertFalse(DepartureDetection.isBeyondStation(origin: home, station: station, fix: fix(metersNorth: 1200)), "on the way to the station")

@@ -623,32 +623,36 @@ public final class CommuteViewModel {
         let weekday = Calendar.caltrain.component(.weekday, from: plan.targetLeave)
         guard !trips.isUnderWay(currentCommute), !trips.ended.contains(currentCommute),
               profile.commuteDays.contains(weekday) else { return }
+        // Already at the trip's destination: nothing to leave for (e.g. home before the evening trip).
+        if let destination = profile.destination(for: direction).coordinate,
+           !DepartureDetection.isAway(from: destination, fix: fix) { return }
 
-        // Well past the station means already on a train (app opened mid-ride);
-        // otherwise the rider is heading for the planned train.
-        let beyondStation = DepartureDetection.isBeyondStation(origin: origin, station: plan.originStation.coordinate, fix: fix)
-        if beyondStation, let riding = await ridingTrain(in: plan, near: fix, now: date),
-           DepartureDetection.hasLeft(origin: origin, fix: fix, targetLeave: plan.targetLeave, trainDeparture: riding.arrivalTime, now: date) {
-            await markDeparted(on: riding)
+        // Well past the station: on a train if one is running where the rider is (app opened
+        // mid-ride), else just somewhere else. Otherwise the rider is heading for the planned train.
+        if DepartureDetection.isBeyondStation(origin: origin, station: plan.originStation.coordinate, fix: fix) {
+            if let riding = await ridingTrain(in: plan, near: fix, now: date),
+               DepartureDetection.hasLeft(origin: origin, fix: fix, targetLeave: plan.targetLeave, trainDeparture: riding.arrivalTime, now: date) {
+                await markDeparted(on: riding)
+            }
         } else if let train = plan.train?.train,
                   DepartureDetection.hasLeft(origin: origin, fix: fix, targetLeave: plan.targetLeave, trainDeparture: train.departureTime, now: date) {
             await markDeparted(on: train)
         }
     }
 
-    /// Of the trains running right now, the one whose timetable position is closest to the rider.
+    /// Of the trains running right now, the closest one whose timetable position is near the
+    /// rider; `nil` when none is, since being far from the start alone doesn't mean riding.
     private func ridingTrain(in plan: CommutePlan, near fix: LocationFix, now date: Date) async -> TrainDeparture? {
-        let running = plan.runningTrains(preferred: profile.preferredServices, at: date)
-        guard running.count > 1 else { return running.first }
         var best: (train: TrainDeparture, distance: Double)?
-        for train in running {
-            guard let position = await timetable.path(for: train)?.position(at: date, delay: TimeInterval(train.delaySeconds)) else { continue }
+        for train in plan.runningTrains(preferred: profile.preferredServices, at: date) {
+            guard let position = await timetable.path(for: train)?.position(at: date, delay: TimeInterval(train.delaySeconds)),
+                  DepartureDetection.isOnTrain(at: position.coordinate, fix: fix) else { continue }
             let distance = position.coordinate.distance(to: fix.coordinate)
             if distance < best?.distance ?? .infinity {
                 best = (train, distance)
             }
         }
-        return best?.train ?? running.last
+        return best?.train
     }
 
     /// Marks the commute on screen as under way on `train`, by hand: "On my way" on the card,
