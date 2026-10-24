@@ -35,6 +35,7 @@ struct CommuteMapView: View {
         let coordinate: Coordinate
         let symbol: String
         let color: Color
+        var isStation: Bool { symbol == "tram.fill" }
     }
 
     var body: some View {
@@ -50,19 +51,19 @@ struct CommuteMapView: View {
                 MapPolyline(coordinates: accessLegs[index])
                     .stroke(Color.blue, style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [5, 6]))
             }
+            ForEach(pins) { pin in
+                // Centered on the coordinate. Stations are small stops on the line; home and work
+                // keep their icons, so the ends of the trip read first.
+                Annotation(pin.title, coordinate: pin.coordinate.clLocationCoordinate, anchor: .center) {
+                    marker(pin)
+                }
+            }
             if let trainPosition, let trainPath {
-                // Arrow only: the train is already named on the card.
+                // Last, so it moves over the pins. Arrow only: the train is already named on the card.
                 Annotation("Train \(trainPath.trainNumber)", coordinate: trainPosition.coordinate.clLocationCoordinate, anchor: .center) {
                     trainMarker(heading: trainPosition.heading)
                 }
                 .annotationTitles(.hidden)
-            }
-            ForEach(pins) { pin in
-                // Centered on the coordinate, same size for every pin: start and end are both
-                // part of every trip, so neither is singled out.
-                Annotation(pin.title, coordinate: pin.coordinate.clLocationCoordinate, anchor: .center) {
-                    marker(pin)
-                }
             }
         }
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
@@ -167,16 +168,29 @@ struct CommuteMapView: View {
 
     private func trainMarker(heading: Double) -> some View {
         Image(systemName: "location.north.fill")
-            .font(.system(size: 14, weight: .bold))
+            .font(.system(size: 12, weight: .bold))
             .foregroundStyle(.white)
             .rotationEffect(.degrees(heading))
-            .frame(width: 30, height: 30)
+            .frame(width: 26, height: 26)
             .background(Color.black.opacity(0.8), in: Circle())
             .overlay(Circle().stroke(.white, lineWidth: 2))
             .shadow(color: .black.opacity(0.3), radius: 4, y: 1)
     }
 
+    @ViewBuilder
     private func marker(_ pin: Pin) -> some View {
+        if pin.isStation {
+            Circle()
+                .fill(.white)
+                .frame(width: 14, height: 14)
+                .overlay(Circle().stroke(Color.red, lineWidth: 4))
+                .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+        } else {
+            placeMarker(pin)
+        }
+    }
+
+    private func placeMarker(_ pin: Pin) -> some View {
         Image(systemName: pin.symbol)
             .font(.system(size: 13, weight: .bold))
             .foregroundStyle(.white)
