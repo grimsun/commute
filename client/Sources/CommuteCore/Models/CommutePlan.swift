@@ -171,14 +171,6 @@ public struct CommutePlan: Equatable, Sendable {
         !train.isCancelled && now <= attempts(for: train).tooLateAt
     }
 
-    /// The soonest the rider can be at the door by train, leaving now: the earliest door arrival
-    /// of a preferred train still catchable. Not always the next train; an express may overtake.
-    public func earliestDoorArrival(preferred: Set<TrainService>, at now: Date) -> Date? {
-        upcoming
-            .filter { $0.isUsable(preferred: preferred) && isCatchable($0, at: now) }
-            .map(doorArrival(for:))
-            .min()
-    }
 }
 
 public enum AttemptRules {

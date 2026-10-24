@@ -74,7 +74,7 @@ services when the data source changes.
   departed: the card shows "You're on your way" / "You're on the train" and that trip's alerts stop.
   Without access, nothing changes.
 - Door arrival = train arrival + minutes from the destination platform.
-- The driving card compares leaving now by car with the earliest train you can still catch. Tap it
+- The driving card shows driving now and how the traffic is. Tap it
   for driving directions in Apple Maps; touch and hold to choose Google Maps instead.
 
 ## Card states

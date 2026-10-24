@@ -4,7 +4,6 @@ import SwiftUI
 /// Apple Maps; touch and hold to choose Google Maps.
 struct CarCard: View {
     let plan: CommutePlan
-    let preferred: Set<TrainService>
     let now: Date
     /// Door to door by car; `nil` hides the maps actions.
     var directions: DrivingDirections? = nil
@@ -45,7 +44,7 @@ struct CarCard: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 32)
                 if let car = plan.car {
-                    // Two rows, each aligned on its text baseline: drive time / arrival, traffic / train arrival.
+                    // Two rows aligned on their text baselines: drive time and arrival, then the traffic.
                     Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
                         GridRow(alignment: .firstTextBaseline) {
                             Text("Driving \(Format.minutes(car.eta))")
@@ -60,17 +59,6 @@ struct CarCard: View {
                             Text(car.isTrafficGood ? "Light traffic" : "Heavy traffic · +\(Format.minutes(car.delay))")
                                 .font(.subheadline)
                                 .foregroundStyle(car.isTrafficGood ? .green : .orange)
-                                // The traffic is the point; the train time scales down instead.
-                                .fixedSize()
-                            // Leaving now either way, so the train that gets there first, not the planned one.
-                            if let arrival = plan.earliestDoorArrival(preferred: preferred, at: now) {
-                                Text("By train earliest \(Format.time(arrival))")
-                                    .font(.caption)
-                                    .minimumScaleFactor(0.7)
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
-                                    .frame(maxWidth: .infinity, alignment: .trailing)
-                            }
                         }
                     }
                     .lineLimit(1)
