@@ -8,11 +8,11 @@ A Caltrain commute planner for people who bike (or walk) to the station.
 It picks your train, counts down to when you need to be out the door, and
 rolls you onto the next train when you miss one.
 
-<img src="docs/screenshots/on-track.png" width="260" alt="You're on track: leave in 37 minutes for Express 510">
+<img src="docs/screenshots/on-track.png" width="260" alt="You're on track: leave in 37 minutes for Express 506">
 &nbsp;
-<img src="docs/screenshots/leave-now.png" width="260" alt="Leave now: too late in 2 minutes">
+<img src="docs/screenshots/leave-now.png" width="260" alt="Leave now: too late in 3 minutes">
 &nbsp;
-<img src="docs/screenshots/next-train.png" width="260" alt="Too late for the 8:20, rolled to Local 114, with the upcoming trains list">
+<img src="docs/screenshots/next-train.png" width="260" alt="Too late for the 7:20, rolled to Local 110, with its stops and the upcoming trains">
 
 </div>
 
@@ -37,8 +37,8 @@ Commute works backwards from the train, using how long *you* take to get to the 
 - **Missed it? No drama.** Past "too late", it moves to the next train you can still catch and tells you when to leave for that one.
 - **Alerts.** "Get ready" and "Leave now" notifications, even with the app closed. With location access, the app notices you've left and the rest of the trip stays quiet; on the way it shows when your train leaves, on board when it arrives, and a heads-up comes just before your stop.
 - **Lock Screen countdown.** A Live Activity counts down to leaving, to the train, then to arrival, in the Dynamic Island too.
-- **Your call.** Long-press any train in the list to pin it instead; tap it to see its stops. When an express would get you there sooner without leaving earlier, the card says so.
-- **Commute or schedule.** On commute days around your target times the app plans your trip; on weekends, holidays and in between it opens as a plain timetable between any two stations. One tap switches.
+- **Your call.** Long-press a train in the list to pin it instead, or to say you're on it; tap it to see its stops. When an express would get you there sooner without leaving earlier, the card says so.
+- **Commute or schedule.** On commute days around your target times the app plans your trip; on weekends, holidays and in between it opens as a plain timetable between any two stations. One tap switches. Until you add your home and work addresses, it's a timetable only.
 - **Delays and cancellations.** Predicted times replace the timetable; a cancelled target train hands over to the next one. The card says which schedule runs today: weekday, weekend or holiday.
 
 ## Features
@@ -48,15 +48,17 @@ Commute works backwards from the train, using how long *you* take to get to the 
 | 🚲 **Bike or walk** | Your door-to-platform minutes for each end, with an Apple Maps estimate to start from. Shows when you'll actually reach the door. |
 | 📅 **Real timetable** | Downloads Caltrain's published schedule on first launch and keeps it on the phone. Refresh any time in Settings. |
 | 🚄 **Train types** | Local, Limited, Express, South County. Turn off the ones you'd never take, and they disappear from planning. |
-| 🗺️ **Map** | Your ride drawn along the real Caltrain track, with your train gliding along it (its scheduled position, or live with the server). |
-| 🔁 **Both directions** | Follows the morning trip until four hours after your target, then the evening one; tap ⇆ to switch by hand. |
-| 🚗 **Car check** | Driving time against free-flow traffic, for days when the train isn't the answer. |
+| 🗺️ **Map** | Your ride drawn along the real Caltrain track, the rest of the train's route faintly beyond it, and your train gliding along (its scheduled position, or live with the server). |
+| 🔁 **Both directions** | Follows the morning trip until four hours after your target, then the evening one; tap the arrow on the card to switch by hand. |
+| 🚗 **Car check** | Driving time against free-flow traffic, for days when the train isn't the answer. Tap for directions in Apple Maps, or hold for Google Maps. |
 | ⚙️ **All 31 stations** | Pick an address and the nearest station is selected; override it if you ride to a faster stop. |
 
 <div align="center">
-<img src="docs/screenshots/evening.png" width="260" alt="Evening commute, to home">
+<img src="docs/screenshots/evening.png" width="260" alt="Evening commute: on the train home, next stop and arrival">
 &nbsp;
-<img src="docs/screenshots/settings.png" width="260" alt="Settings: places, stations, target leave times">
+<img src="docs/screenshots/schedule.png" width="260" alt="Schedule mode on a Saturday: next trains from Palo Alto to San Francisco">
+&nbsp;
+<img src="docs/screenshots/settings.png" width="260" alt="Settings: train data, places, stations, travel times">
 </div>
 
 ## How it fits together
@@ -77,11 +79,11 @@ flowchart LR
     maps --> app
 ```
 
-The app has two modes, switched in Settings:
+The app is built for two data sources:
 
 - **Standalone** (default): Caltrain's timetable on the phone, live delays and cancellations from Caltrain's public feed (fetched only around a trip, at most every few minutes), alerts scheduled by the app. Nothing to host.
-- **Server**: point the app at your Commute server for live delays and push notifications that follow them.
-  If the server can't be reached, the app falls back to the timetable.
+- **Server** (planned): your Commute server for live delays and push notifications that follow them,
+  falling back to the timetable when it can't be reached. The code is in place; Settings offers only standalone for now.
 Everything runs on free APIs; no billing account anywhere.
 
 ## Repository

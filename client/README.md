@@ -96,7 +96,7 @@ station, 3 min buffer, 20 min prep). The same applies to the evening trip from w
 | Next train (blue) | away from home or work with no trip under way, e.g. after End trip | "Departs in 4 min", On this train |
 
 Schedule mode shows "Next train · Departs in…" for the chosen stations, with the train after it.
-`-debugNow <ISO 8601>`, `-debugTrip <number|none|ended>` and `-debugPanel compact|expanded` launch
+`-debugNow <ISO 8601>`, `-debugTrip <number|none|ended>` and `-debugPanel compact|collapsed|expanded` launch
 options reproduce each state in the simulator.
 
 ## Run
@@ -112,6 +112,11 @@ Debug launch arguments (scheme → Run → Arguments) for screenshots and testin
 
 ```
 -debugNow 2026-10-19T07:45:00-07:00   # fixed clock that then ticks
--debugPanel collapsed|expanded       # initial sheet position
+-debugPanel compact|collapsed|expanded   # initial sheet position
+-debugTrip <train number>|none|ended  # a trip under way on that train, or none
 -debugSettings YES                    # open Settings once loaded
 ```
+
+The screenshots in `docs/screenshots` are Monday 2026-10-26 (on track 6:35, leave now 7:12:10,
+missed 7:16:30 expanded, on the train 18:04 with `-debugTrip 523`), Saturday 2026-10-31 10:30 for
+Schedule, and Settings at 6:35, with home in San Francisco and work at Stanford.
