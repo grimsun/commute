@@ -29,6 +29,7 @@ struct SettingsView: View {
                 locationSection
                 trainTypesSection
                 carSection
+                appearanceSection
             }
             .navigationTitle("Settings")
             #if os(iOS)
@@ -293,6 +294,18 @@ struct SettingsView: View {
             Text("Car comparison")
         } footer: {
             Text("Driving counts as good when it is at most this much slower than with no traffic.")
+        }
+    }
+
+    private var appearanceSection: some View {
+        Section("Appearance") {
+            Picker("Appearance", selection: $draft.appearance) {
+                ForEach(Appearance.allCases, id: \.self) { appearance in
+                    Text(appearance.displayName).tag(appearance)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
         }
     }
 

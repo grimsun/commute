@@ -45,6 +45,9 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
     /// Off, trips are only marked by hand.
     public var usesLocation: Bool
 
+    /// Light, dark, or following the system.
+    public var appearance: Appearance
+
     /// The last stations looked up in schedule mode; `nil` starts from the commute stations.
     public var scheduleRoute: StationRoute?
 
@@ -100,6 +103,7 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         dataSource: DataSourceSettings = DataSourceSettings(),
         liveActivityEnabled: Bool = true,
         usesLocation: Bool = true,
+        appearance: Appearance = .system,
         scheduleRoute: StationRoute? = nil
     ) {
         self.home = home
@@ -121,6 +125,7 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         self.dataSource = dataSource
         self.liveActivityEnabled = liveActivityEnabled
         self.usesLocation = usesLocation
+        self.appearance = appearance
         self.scheduleRoute = scheduleRoute
     }
 
@@ -181,7 +186,7 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case home, work, homeStationID, workStationID, accessMode, bikeSpeedKph, homeStationMinutes, workStationMinutes
         case stationSafetyBufferMinutes, prepLeadTimeMinutes, morningTargetLeave, eveningTargetLeave, commuteDays
-        case preferredServices, carGoodDeltaMinutes, leaveAlertsEnabled, dataSource, liveActivityEnabled, usesLocation, scheduleRoute
+        case preferredServices, carGoodDeltaMinutes, leaveAlertsEnabled, dataSource, liveActivityEnabled, usesLocation, appearance, scheduleRoute
         case otherModeMinutes
     }
 
@@ -207,6 +212,7 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         dataSource = try c.decodeIfPresent(DataSourceSettings.self, forKey: .dataSource) ?? d.dataSource
         liveActivityEnabled = try c.decodeIfPresent(Bool.self, forKey: .liveActivityEnabled) ?? d.liveActivityEnabled
         usesLocation = try c.decodeIfPresent(Bool.self, forKey: .usesLocation) ?? d.usesLocation
+        appearance = try c.decodeIfPresent(Appearance.self, forKey: .appearance) ?? d.appearance
         scheduleRoute = try c.decodeIfPresent(StationRoute.self, forKey: .scheduleRoute)
         otherModeMinutes = try c.decodeIfPresent(StationMinutes.self, forKey: .otherModeMinutes)
     }

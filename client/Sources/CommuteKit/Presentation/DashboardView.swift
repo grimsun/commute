@@ -161,6 +161,11 @@ public struct DashboardView: View {
         .task {
             await viewModel.run()
         }
+        #if os(iOS)
+        .onChange(of: viewModel.profile.appearance, initial: true) { _, appearance in
+            appearance.apply()
+        }
+        #endif
         .onChange(of: viewModel.isLoaded) { _, loaded in
             guard loaded else { return }
             // Wait for the sheet's presentation to settle, or it resets to the first detent.

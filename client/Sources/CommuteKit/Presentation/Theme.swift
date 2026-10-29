@@ -30,6 +30,36 @@ extension AccessMode {
     }
 }
 
+extension Appearance {
+    var displayName: String {
+        switch self {
+        case .system: "System"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
+
+    #if os(iOS)
+    var interfaceStyle: UIUserInterfaceStyle {
+        switch self {
+        case .system: .unspecified
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+
+    /// Applies to every window, so the map, the sheet and anything presented on it follow at once.
+    @MainActor
+    func apply() {
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            for window in scene.windows {
+                window.overrideUserInterfaceStyle = interfaceStyle
+            }
+        }
+    }
+    #endif
+}
+
 extension Direction {
     var title: String {
         self == .homeToWork ? "To work" : "To home"

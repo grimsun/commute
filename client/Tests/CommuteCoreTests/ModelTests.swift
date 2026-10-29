@@ -10,6 +10,14 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(profile.preferredServices, [.express])
         XCTAssertEqual(profile.workStationID, CommuteProfile.default.workStationID)
         XCTAssertEqual(profile.morningTargetLeave, CommuteProfile.default.morningTargetLeave)
+        XCTAssertEqual(profile.appearance, .system)
+    }
+
+    func testProfileKeepsAppearance() throws {
+        var profile = CommuteProfile.default
+        profile.appearance = .dark
+        let decoded = try JSONDecoder().decode(CommuteProfile.self, from: JSONEncoder().encode(profile))
+        XCTAssertEqual(decoded.appearance, .dark)
     }
 
     func testProfileDecodingIgnoresRemovedFields() throws {

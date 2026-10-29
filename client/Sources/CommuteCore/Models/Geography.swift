@@ -57,6 +57,13 @@ public enum AccessMode: String, Codable, CaseIterable, Sendable {
     case walk
 }
 
+/// The app's color scheme: the system's, or always light or dark.
+public enum Appearance: String, Codable, CaseIterable, Sendable {
+    case system
+    case light
+    case dark
+}
+
 /// A wall-clock time in the Caltrain time zone, independent of date.
 public struct TimeOfDay: Codable, Hashable, Comparable, Sendable {
     public var hour: Int
