@@ -189,7 +189,7 @@ struct HeroCard: View {
                             .minimumScaleFactor(0.8)
                             .accessibilityIdentifier("following-train")
                     } else {
-                        Text(journeyLine(train))
+                        journeyLine(train)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -351,24 +351,28 @@ struct HeroCard: View {
         return Text("Too late in ") + colored(Format.countdown(to: attempts.tooLateAt, from: now)) + detail(" · at \(Format.time(attempts.tooLateAt))")
     }
 
-    /// "10 min by 🚲 to 🚆 · 3 min buffer · 🏢 at 9:26 AM"
-    private func journeyLine(_ train: TrainDeparture) -> String {
-        let arrival = "\(destinationEmoji) at \(Format.time(plan.doorArrival(for: train)))"
-        let mode = profile.accessMode == .bike ? "🚲" : "🚶"
+    /// "10 min by 🚲 to 🚆 · 3 min buffer · 🏢 at 9:26 AM", drawn with symbols that take the text's
+    /// color, so they stay legible in dark mode.
+    private func journeyLine(_ train: TrainDeparture) -> Text {
+        let arrival = Text("\(symbol(destinationSymbol)) at \(Format.time(plan.doorArrival(for: train)))")
+        let mode = symbol(profile.accessMode.symbol)
         if hasDeparted && now >= train.departureTime {
             // Off the train, the line above already gives the door time.
             if now >= train.arrivalTime {
-                return "\(Format.minutes(plan.egressTime)) by \(mode) from \(plan.destinationStation.name)"
+                return Text("\(Format.minutes(plan.egressTime)) by \(mode) from \(plan.destinationStation.name)")
             }
             // On board: the line above names the station; only the last leg remains.
-            return "Then \(Format.minutes(plan.egressTime)) by \(mode) · \(arrival)"
+            return Text("Then \(Format.minutes(plan.egressTime)) by \(mode) · ") + arrival
         }
-        var parts = ["\(Format.minutes(plan.accessTime)) by \(mode) to 🚆"]
+        var line = Text("\(Format.minutes(plan.accessTime)) by \(mode) to \(symbol("tram.fill"))")
         if plan.safetyBuffer >= 60 {
-            parts.append("\(Format.minutes(plan.safetyBuffer)) buffer")
+            line = line + Text(" · \(Format.minutes(plan.safetyBuffer)) buffer")
         }
-        parts.append(arrival)
-        return parts.joined(separator: " · ")
+        return line + Text(" · ") + arrival
+    }
+
+    private func symbol(_ name: String) -> Image {
+        Image(systemName: name)
     }
 
     /// Schedule mode: "Then 5:42 PM · Local 147", the train after this one.
@@ -381,8 +385,8 @@ struct HeroCard: View {
         return "Then \(Format.time(next.departureTime)) · \(next.service.displayName) \(next.trainNumber)"
     }
 
-    private var destinationEmoji: String {
-        plan.direction == .homeToWork ? "🏢" : "🏠"
+    private var destinationSymbol: String {
+        plan.direction == .homeToWork ? "building.2.fill" : "house.fill"
     }
 
     /// The loaded path, if it belongs to the train on the card.

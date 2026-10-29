@@ -121,8 +121,8 @@ enum Urgency: Hashable {
     var color: Color {
         switch self {
         case .relaxed: .green
-        // A deep amber reads as yellow but stays legible on white.
-        case .soon: Color(red: 0.85, green: 0.62, blue: 0.0)
+        // A deep amber reads as yellow but stays legible on white; on dark, a brighter yellow.
+        case .soon: Color(light: Color(red: 0.85, green: 0.62, blue: 0.0), dark: Color(red: 1.0, green: 0.8, blue: 0.04))
         case .urgent, .missed: .red
         case .neutral: .blue
         }
@@ -174,6 +174,17 @@ struct Card<Content: View>: View {
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Palette.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+}
+
+extension Color {
+    /// One color in light mode and another in dark mode.
+    init(light: Color, dark: Color) {
+        #if os(iOS)
+        self.init(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(dark) : UIColor(light) })
+        #else
+        self.init(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(dark) : NSColor(light) })
+        #endif
     }
 }
 
