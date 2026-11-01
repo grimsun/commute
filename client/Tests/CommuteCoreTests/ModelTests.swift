@@ -164,6 +164,23 @@ final class ModelTests: XCTestCase {
         XCTAssertFalse(isCommute(at(25, 17, 30)))
     }
 
+    func testWeekendPointsAtMondayMorning() {
+        let calendar = Calendar.caltrain
+        func at(_ day: Int, _ hour: Int, _ minute: Int = 0) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: hour, minute: minute))!
+        }
+        let profile = CommuteProfile.default // 8:00 and 17:30, Monday to Friday
+
+        // Friday, October 23, after the evening window; Saturday evening; Sunday night.
+        for now in [at(23, 22), at(24, 18, 12), at(25, 21)] {
+            XCTAssertEqual(CommuteWindow.activeDirection(profile: profile, now: now, calendar: calendar), .homeToWork)
+            XCTAssertEqual(CommuteWindow.targetLeave(for: .homeToWork, profile: profile, now: now, calendar: calendar), at(26, 8))
+            XCTAssertEqual(CommuteWindow.targetLeave(for: .workToHome, profile: profile, now: now, calendar: calendar), at(26, 17, 30))
+        }
+        // Friday evening's own trip is still Friday's.
+        XCTAssertEqual(CommuteWindow.targetLeave(for: .workToHome, profile: profile, now: at(23, 18), calendar: calendar), at(23, 17, 30))
+    }
+
     func testLateEveningWindowContinuesAcrossMidnight() {
         let calendar = Calendar.caltrain
         func at(_ day: Int, _ hour: Int) -> Date {

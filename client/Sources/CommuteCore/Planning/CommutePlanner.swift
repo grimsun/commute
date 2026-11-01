@@ -49,11 +49,15 @@ public struct CommutePlanner: Sendable {
             now: now,
             profile: profile
         )
-        // Start a little earlier so the list can show the last trains that already left.
+        // Start a little earlier so the list can show the last trains that already left. A trip
+        // hours away (Monday's, seen on Saturday) lists that morning's trains, not tonight's.
+        let start = targetLeave.timeIntervalSince(now) > CommuteWindow.commuteLead
+            ? targetLeave.addingTimeInterval(-CommuteWindow.commuteLead)
+            : min(now, targetLeave)
         let snapshot = try await transit.departures(
             fromStation: originID,
             toStation: destinationID,
-            after: min(now, targetLeave).addingTimeInterval(-Self.departedLookback),
+            after: start.addingTimeInterval(-Self.departedLookback),
             limit: 30
         )
 

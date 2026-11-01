@@ -51,6 +51,8 @@ extension CommuteProfile {
         result.prepLeadTimeMinutes = 0
         result.morningTargetLeave = TimeOfDay(date: date)
         result.eveningTargetLeave = TimeOfDay(date: date)
+        // Any day has a schedule; the target stays on `date`.
+        result.commuteDays = Set(1...7)
         return result
     }
 }
