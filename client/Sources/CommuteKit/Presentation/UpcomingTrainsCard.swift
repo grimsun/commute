@@ -86,14 +86,15 @@ struct UpcomingTrainsCard: View {
                 let spansDays = Set(rows.map { DateKey.key(for: $0.departureTime) }).count > 1
                 ForEach(Array(rows.enumerated()), id: \.element.id) { index, train in
                     VStack(alignment: .leading, spacing: 4) {
-                    // Day labels only matter when the list crosses midnight.
-                    if spansDays && (index == 0 || !Calendar.caltrain.isDate(rows[index - 1].departureTime, inSameDayAs: train.departureTime)) {
+                    // Day labels only matter when the list crosses midnight or starts on another day.
+                    if index == 0 ? spansDays || !Calendar.caltrain.isDate(train.departureTime, inSameDayAs: now)
+                        : !Calendar.caltrain.isDate(rows[index - 1].departureTime, inSameDayAs: train.departureTime) {
                         Text(Format.day(train.departureTime, relativeTo: now))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .padding(.top, index == 0 ? 0 : 6)
                     }
-                    row(train, showsCountdown: countdownIDs.contains(train.id) || train.id == highlightedID)
+                    row(train, showsCountdown: (countdownIDs.contains(train.id) || train.id == highlightedID) && isSoon(train))
                     if openRowID == train.id {
                         Group {
                             if let openPath, openPath.tripID == train.tripID {
@@ -189,6 +190,12 @@ struct UpcomingTrainsCard: View {
     }
 
     /// A train of a type turned off in Settings, unless it's the one on the card (pinned).
+    /// Countdowns only for today's trains or ones close by; "Leave in 35h" says less than the day label.
+    private func isSoon(_ train: TrainDeparture) -> Bool {
+        Calendar.caltrain.isDate(train.departureTime, inSameDayAs: now)
+            || train.departureTime.timeIntervalSince(now) < CommuteWindow.commuteLead
+    }
+
     private func isSkipped(_ train: TrainDeparture) -> Bool {
         guard let preferredServices, train.id != highlightedID else { return false }
         return !preferredServices.contains(train.service)

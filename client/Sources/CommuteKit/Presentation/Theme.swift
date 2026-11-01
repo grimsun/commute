@@ -78,6 +78,8 @@ enum Format {
         case 0: return "Today"
         case 1: return "Tomorrow"
         case -1: return "Yesterday"
+        // Within the coming week the weekday is enough: "Monday".
+        case let days? where (2...6).contains(days): return weekday(date)
         default: return date.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted, timeZone: calendar.timeZone))
         }
     }

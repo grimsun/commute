@@ -288,6 +288,14 @@ struct HeroCard: View {
         return day + "Train \(train.trainNumber)"
     }
 
+    /// Commute mode with the next trip on a later day, beyond the hours before it when the app
+    /// opens in Commute by itself: the card names the day instead of counting down hours.
+    private func isLaterDay(_ option: TrainOption) -> Bool {
+        guard !isNeutral, !hasDeparted else { return false }
+        let leave = option.attempts.leaveAt
+        return !Calendar.caltrain.isDate(leave, inSameDayAs: now) && leave.timeIntervalSince(now) > CommuteWindow.commuteLead
+    }
+
     /// "You're on track", "Get ready", "Leave soon", "Leave now", or "Missed it" just before re-planning.
     private func statusTitle(_ option: TrainOption, urgency: Urgency) -> String {
         if isOtherDay {
@@ -295,6 +303,11 @@ struct HeroCard: View {
         }
         if isSchedule {
             return urgency == .missed ? "Departed" : "Next train"
+        }
+        if isLaterDay(option) {
+            // "Monday morning", "Tomorrow evening".
+            let part = plan.direction == .homeToWork ? "morning" : "evening"
+            return "\(Format.day(option.attempts.leaveAt, relativeTo: now)) \(part)"
         }
         if hasDeparted {
             if now < option.train.departureTime { return "You’re on your way" }
@@ -323,6 +336,12 @@ struct HeroCard: View {
         }
         if isSchedule && urgency == .missed {
             return detail("Finding the next train…")
+        }
+        if isLaterDay(option) {
+            // "Leave by 7:12 AM · in 2 days"; tomorrow is already in the title.
+            let calendar = Calendar.caltrain
+            let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: attempts.leaveAt)).day ?? 0
+            return Text("Leave by ") + colored(Format.time(attempts.leaveAt)) + detail(days > 1 ? " · in \(days) days" : "")
         }
         if isNeutral {
             return Text("Departs in ") + colored(Format.countdown(to: option.train.departureTime, from: now)) + detail(" · \(Format.time(option.train.departureTime))")
