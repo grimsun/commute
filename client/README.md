@@ -6,7 +6,7 @@
 |---|---|---|
 | Trains | Caltrain GTFS timetable, downloaded on first launch and cached | Server realtime, timetable as fallback |
 | Delays, cancellations | ✓ Caltrain's public JSON feed, fetched only within 90 min of a trip, at most every 3 min (30 s on manual refresh), 5 min backoff after errors | ✓ |
-| Leave alerts | Local notifications, scheduled a week ahead | Push notifications from the server |
+| Leave alerts | Local notifications, scheduled a week ahead; background app refresh re-plans them with live delays | Push notifications from the server |
 
 Settings only offers standalone; server mode stays in the code but is reachable only through a saved profile, and saving Settings returns to standalone. The timetable refreshes from Settings → Train data → Refresh.
 
@@ -74,6 +74,11 @@ services when the data source changes.
   departed: the card shows "You're on your way" / "You're on the train" and that trip's alerts stop.
   Without access, nothing changes.
 - Door arrival = train arrival + minutes from the destination platform.
+- Leave alerts (Settings → Notifications) ask for permission when turned on. If iOS blocks them, they stay
+  scheduled and Settings says so, with a link to the Settings app; **Send a test alert** shows the current
+  train's leave now alert in 5 seconds. Background app refresh (`lab.CommuteApp.alerts`) re-plans the week's
+  alerts every 6 hours and about an hour before the next get ready / leave now, fetching live delays when a
+  trip is within 90 minutes; iOS decides when it actually runs.
 - Settings → Appearance: System (default), Light or Dark, applied to the whole window.
 - The driving card shows driving now and how the traffic is. Tap it
   for driving directions in Apple Maps; touch and hold to choose Google Maps instead.

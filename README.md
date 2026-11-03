@@ -35,7 +35,7 @@ Commute works backwards from the train, using how long *you* take to get to the 
   It follows the first train you'd catch leaving then.
 - **Get ready → Leave now → Too late.** The countdown moves through each stage as the minutes tick by.
 - **Missed it? No drama.** Past "too late", it moves to the next train you can still catch and tells you when to leave for that one.
-- **Alerts.** "Get ready" and "Leave now" notifications, even with the app closed. With location access, the app notices you've left and the rest of the trip stays quiet; on the way it shows when your train leaves, on board when it arrives, and a heads-up comes just before your stop.
+- **Alerts.** "Get ready" and "Leave now" notifications, even with the app closed. Before your trip the app checks Caltrain's live delays in the background and moves them. Settings warns if notifications are off and can send a test alert. With location access, the app notices you've left and the rest of the trip stays quiet; on the way it shows when your train leaves, on board when it arrives, and a heads-up comes just before your stop.
 - **Lock Screen countdown.** A Live Activity counts down to leaving, to the train, then to arrival, in the Dynamic Island too.
 - **Your call.** Long-press a train in the list to pin it instead, or to say you're on it; tap it to see its stops. When an express would get you there sooner without leaving earlier, the card says so.
 - **Commute or schedule.** On commute days around your target times the app plans your trip; on weekends, holidays and in between it opens as a plain timetable between any two stations. One tap switches. Until you add your home and work addresses, it's a timetable only.
@@ -82,7 +82,7 @@ flowchart LR
 
 The app is built for two data sources:
 
-- **Standalone** (default): Caltrain's timetable on the phone, live delays and cancellations from Caltrain's public feed (fetched only around a trip, at most every few minutes), alerts scheduled by the app. Nothing to host.
+- **Standalone** (default): Caltrain's timetable on the phone, live delays and cancellations from Caltrain's public feed (fetched only around a trip, at most every few minutes), alerts scheduled by the app and re-planned in the background with live delays. Nothing to host.
 - **Server** (planned): your Commute server for live delays and push notifications that follow them,
   falling back to the timetable when it can't be reached. The code is in place; Settings offers only standalone for now.
 Everything runs on free APIs; no billing account anywhere.
