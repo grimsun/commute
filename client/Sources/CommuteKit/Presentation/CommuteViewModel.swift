@@ -46,6 +46,8 @@ public final class CommuteViewModel {
     /// Which timetable runs on the day of the card's train ("Weekday schedule", holidays).
     public private(set) var scheduleDay: ScheduleDay?
     public private(set) var isUpdatingTimetable = false
+    /// When background refresh should next re-plan the alerts; the app asks iOS for it on leaving.
+    public private(set) var nextBackgroundRefresh = Date().addingTimeInterval(LeaveAlertPlanner.refreshInterval)
     /// Whether iOS lets leave alerts show; Settings warns when they're on but blocked.
     public private(set) var alertAuthorization: AlertAuthorization = .allowed
     public private(set) var timetableError: String?
@@ -178,6 +180,31 @@ public final class CommuteViewModel {
 
     public func updateAlertAuthorization() async {
         alertAuthorization = await services.alerts.authorization()
+    }
+
+    /// Background app refresh: re-plans the alerts from the timetable, with Caltrain's live delays
+    /// when a trip is close, so they follow delays and stay a week ahead without opening the app.
+    public func refreshInBackground() async {
+        if !didLoadProfile {
+            // Launched in the background: `run()` loads everything again once the app is opened.
+            profile = await profileStore.loadProfile() ?? .default
+            services = factory.services(for: profile.dataSource)
+        }
+        guard profile.leaveAlertsEnabled, profile.hasAddresses else { return }
+        let date = now()
+        await loadDepartures()
+        if let feed = services.liveFeed, await isTripSoon(at: date) {
+            await feed.refreshIfDue()
+        }
+        await rescheduleAlerts()
+    }
+
+    /// The current commute's train leaves within the live-data lead, or is under way.
+    private func isTripSoon(at date: Date) async -> Bool {
+        let planner = CommutePlanner(transit: services.transit, traffic: nil)
+        let active = CommuteWindow.activeDirection(profile: profile, now: date)
+        guard let train = try? await planner.plan(profile: profile, direction: active, now: date).train?.train else { return false }
+        return train.departureTime.timeIntervalSince(date) <= Self.liveDataLead && date < train.arrivalTime
     }
 
     /// Settings' test button: the current commute's leave now alert, a few seconds from now.
@@ -780,6 +807,7 @@ public final class CommuteViewModel {
         // On board: a heads-up just before the rider's stop.
         let arriving = LeaveAlertPlanner.arrivingAlerts(trips: trips, plans: commutePlans, preferred: profile.preferredServices, now: date)
         await scheduler.replaceAlerts(with: leaving + arriving)
+        nextBackgroundRefresh = LeaveAlertPlanner.nextRefresh(after: leaving, now: date)
     }
 
     private static func message(for error: Error) -> String {

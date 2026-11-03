@@ -1,8 +1,8 @@
 import Foundation
 import UserNotifications
 
-/// Standalone-mode alerts: local notifications scheduled from the timetable.
-/// They cannot follow delays; that is what server mode adds.
+/// Standalone-mode alerts: local notifications scheduled from the timetable, re-planned with
+/// live delays by background app refresh.
 public struct LocalLeaveAlertScheduler: LeaveAlertScheduler {
     private static let idPrefix = "leave-"
 

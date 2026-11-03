@@ -165,6 +165,16 @@ final class LeaveAlertPlannerTests: XCTestCase {
         XCTAssertEqual(generic.title, "Leave now for your train")
     }
 
+    func testBackgroundRefreshAnHourBeforeTheNextAlert() async {
+        let (planner, profile) = alertPlanner()
+        let alerts = await planner.alerts(profile: profile, now: at(19, 6)) // get ready 7:47
+
+        XCTAssertEqual(LeaveAlertPlanner.nextRefresh(after: alerts, now: at(19, 6)), at(19, 6, 47))
+        XCTAssertEqual(LeaveAlertPlanner.nextRefresh(after: alerts, now: at(19, 7, 40)), at(19, 7, 55), "no sooner than 15 min")
+        XCTAssertEqual(LeaveAlertPlanner.nextRefresh(after: alerts, now: at(19, 0)), at(19, 6), "at least every 6 h")
+        XCTAssertEqual(LeaveAlertPlanner.nextRefresh(after: [], now: at(19, 9)), at(19, 15))
+    }
+
     func testNoAlertsOnNonCommuteDays() async {
         let (planner, profile) = alertPlanner()
         let alerts = await planner.alerts(profile: profile, now: at(20, 6), days: 6) // Tue through Sun

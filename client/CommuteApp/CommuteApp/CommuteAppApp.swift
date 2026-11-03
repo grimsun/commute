@@ -1,9 +1,11 @@
+import BackgroundTasks
 import CommuteKit
 import SwiftUI
 
 @main
 struct CommuteAppApp: App {
     @State private var viewModel: CommuteViewModel
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         LeaveAlertPresenter.shared.install()
@@ -29,6 +31,28 @@ struct CommuteAppApp: App {
         WindowGroup {
             DashboardView(viewModel: viewModel, panelSize: DebugLaunch.panelSize, showsSettings: DebugLaunch.showsSettings)
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                AlertRefresh.schedule(at: viewModel.nextBackgroundRefresh)
+            }
+        }
+        // Re-plans leave alerts with live delays while the app is closed, then asks for the next run.
+        .backgroundTask(.appRefresh(AlertRefresh.identifier)) {
+            await viewModel.refreshInBackground()
+            await AlertRefresh.schedule(at: viewModel.nextBackgroundRefresh)
+        }
+    }
+}
+
+/// Background app refresh for leave alerts. iOS decides when it actually runs; this only says
+/// when it would help (see `LeaveAlertPlanner.nextRefresh`).
+enum AlertRefresh {
+    static let identifier = "lab.CommuteApp.alerts"
+
+    static func schedule(at date: Date) {
+        let request = BGAppRefreshTaskRequest(identifier: identifier)
+        request.earliestBeginDate = date
+        try? BGTaskScheduler.shared.submit(request)
     }
 }
 

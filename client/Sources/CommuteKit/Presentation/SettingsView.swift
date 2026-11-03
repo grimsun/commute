@@ -286,7 +286,7 @@ struct SettingsView: View {
     }
 
     private var alertsFooter: String {
-        "Scheduled a week ahead from the timetable, so they arrive even if the app stays closed. They can’t follow delays. With location access, a trip’s remaining alerts stop once you’ve left."
+        "Scheduled a week ahead from the timetable, so they arrive even if the app stays closed. Before a trip, the app checks Caltrain’s live delays in the background and moves them (with Background App Refresh on). With location access, a trip’s remaining alerts stop once you’ve left."
     }
 
     private var locationSection: some View {

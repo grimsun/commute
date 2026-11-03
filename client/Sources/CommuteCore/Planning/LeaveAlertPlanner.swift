@@ -119,6 +119,22 @@ public struct LeaveAlertPlanner: Sendable {
         return alerts
     }
 
+    /// Background refresh runs at least this often, so alerts stay a week ahead.
+    public static let refreshInterval: TimeInterval = 6 * 3600
+    /// How long before a get ready or leave now alert a refresh looks for delays.
+    public static let refreshLead: TimeInterval = 60 * 60
+
+    /// When background refresh should next run: about an hour before the next get ready or leave
+    /// now alert, so a delay can still move it, and otherwise every few hours.
+    public static func nextRefresh(after alerts: [LeaveAlert], now: Date) -> Date {
+        let regular = now.addingTimeInterval(refreshInterval)
+        guard let next = alerts.filter({ ($0.kind == .getReady || $0.kind == .leaveNow) && $0.fireDate > now }).map(\.fireDate).min() else {
+            return regular
+        }
+        // iOS runs refreshes no more than every 15 minutes or so anyway.
+        return min(regular, max(now.addingTimeInterval(15 * 60), next.addingTimeInterval(-refreshLead)))
+    }
+
     /// A leave now alert for trying out notifications: the plan's train if there is one.
     public static func testAlert(plan: CommutePlan?, now: Date) -> LeaveAlert {
         if let plan, let option = plan.train,

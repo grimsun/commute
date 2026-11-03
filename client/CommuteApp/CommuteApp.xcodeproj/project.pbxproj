@@ -44,6 +44,13 @@
 			);
 			target = AA0000000000000000000004 /* CommuteWidgetsExtension */;
 		};
+		AA0000000000000000000020 /* Exceptions for "CommuteApp" folder in "CommuteApp" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = F5201FB12F418007003D6CDA /* CommuteApp */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXTargetDependency section */
@@ -62,6 +69,9 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		F5201FB42F418007003D6CDA /* CommuteApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AA0000000000000000000020 /* Exceptions for "CommuteApp" folder in "CommuteApp" target */,
+			);
 			path = CommuteApp;
 			sourceTree = "<group>";
 		};
@@ -371,6 +381,7 @@
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_FILE = CommuteApp/Info.plist;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Commute checks whether you have left home or work, so it can stop leave alerts for that trip.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -404,6 +415,7 @@
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_FILE = CommuteApp/Info.plist;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Commute checks whether you have left home or work, so it can stop leave alerts for that trip.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
