@@ -84,7 +84,7 @@ public struct LeaveAlertPlanner: Sendable {
         return Array(alerts.sorted { $0.fireDate < $1.fireDate }.prefix(Self.maxAlerts))
     }
 
-    static func alerts(for option: TrainOption, plan: CommutePlan, key: CommuteKey, includeGetReady: Bool) -> [LeaveAlert] {
+    public static func alerts(for option: TrainOption, plan: CommutePlan, key: CommuteKey, includeGetReady: Bool) -> [LeaveAlert] {
         let train = option.train
         let attempts = option.attempts
         let trainName = "\(train.service.displayName) \(train.trainNumber)"
@@ -117,6 +117,21 @@ public struct LeaveAlertPlanner: Sendable {
             ))
         }
         return alerts
+    }
+
+    /// A leave now alert for trying out notifications: the plan's train if there is one.
+    public static func testAlert(plan: CommutePlan?, now: Date) -> LeaveAlert {
+        if let plan, let option = plan.train,
+           let alert = alerts(for: option, plan: plan, key: plan.key, includeGetReady: false).first(where: { $0.kind == .leaveNow }) {
+            return alert
+        }
+        return LeaveAlert(
+            commute: CommuteKey(date: now, direction: .homeToWork),
+            kind: .leaveNow,
+            fireDate: now,
+            title: "Leave now for your train",
+            body: "This is how get ready and leave now alerts look."
+        )
     }
 
     /// Minutes before arrival that "your stop is next" fires.

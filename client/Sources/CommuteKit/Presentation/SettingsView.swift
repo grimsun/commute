@@ -264,6 +264,11 @@ struct SettingsView: View {
                 }
                 .padding(.vertical, 2)
             }
+            if draft.leaveAlertsEnabled && draft.hasAddresses {
+                Button("Send a test alert") {
+                    Task { await viewModel.sendTestAlert() }
+                }
+            }
         } header: {
             Text("Notifications")
         } footer: {

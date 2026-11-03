@@ -36,6 +36,8 @@ public protocol LeaveAlertScheduler: Sendable {
     func authorization() async -> AlertAuthorization
     /// Replaces every previously scheduled alert with `alerts`.
     func replaceAlerts(with alerts: [LeaveAlert]) async
+    /// Shows `alert` in a few seconds, leaving the scheduled ones alone (a test from Settings).
+    func showSoon(_ alert: LeaveAlert) async
 }
 
 public struct NoopLeaveAlertScheduler: LeaveAlertScheduler {
@@ -45,6 +47,7 @@ public struct NoopLeaveAlertScheduler: LeaveAlertScheduler {
     public func requestAuthorization() async -> Bool { true }
     public func authorization() async -> AlertAuthorization { .allowed }
     public func replaceAlerts(with alerts: [LeaveAlert]) async {}
+    public func showSoon(_ alert: LeaveAlert) async {}
 }
 
 /// Estimates access time from straight-line distance; the fallback when routing is unavailable.

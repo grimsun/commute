@@ -151,6 +151,20 @@ final class LeaveAlertPlannerTests: XCTestCase {
         XCTAssertEqual(alert.title, "Next stop: Palo Alto")
     }
 
+    func testTestAlertIsThePlannedTrainsLeaveNow() async throws {
+        var profile = CommuteProfile.default
+        profile.homeStationMinutes = 10
+        let transit = FixedTransitProvider(departures: [train("103", departs: at(19, 8, 20))])
+        let plan = try await CommutePlanner(transit: transit, traffic: nil, calendar: calendar).plan(profile: profile, direction: .homeToWork, now: at(19, 6))
+
+        let alert = LeaveAlertPlanner.testAlert(plan: plan, now: at(19, 6))
+        XCTAssertEqual(alert.kind, .leaveNow)
+        XCTAssertTrue(alert.title.contains("103"))
+
+        let generic = LeaveAlertPlanner.testAlert(plan: nil, now: at(19, 6))
+        XCTAssertEqual(generic.title, "Leave now for your train")
+    }
+
     func testNoAlertsOnNonCommuteDays() async {
         let (planner, profile) = alertPlanner()
         let alerts = await planner.alerts(profile: profile, now: at(20, 6), days: 6) // Tue through Sun
@@ -219,6 +233,7 @@ struct RecordingAlertScheduler: LeaveAlertScheduler {
     func requestAuthorization() async -> Bool { true }
     func authorization() async -> AlertAuthorization { .allowed }
     func replaceAlerts(with alerts: [LeaveAlert]) async {}
+    func showSoon(_ alert: LeaveAlert) async {}
 }
 
 final class StubURLProtocol: URLProtocol, @unchecked Sendable {

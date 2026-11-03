@@ -180,6 +180,12 @@ public final class CommuteViewModel {
         alertAuthorization = await services.alerts.authorization()
     }
 
+    /// Settings' test button: the current commute's leave now alert, a few seconds from now.
+    public func sendTestAlert() async {
+        await requestAlertAuthorization()
+        await services.alerts.showSoon(LeaveAlertPlanner.testAlert(plan: commutePlans[direction], now: now()))
+    }
+
     /// Shows the system prompt the first time alerts are turned on; afterwards it only reads the
     /// current answer, which the rider changes in the Settings app.
     public func requestAlertAuthorization() async {
