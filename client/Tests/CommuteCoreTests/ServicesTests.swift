@@ -217,6 +217,7 @@ final class DepartureLogTests: XCTestCase {
 struct RecordingAlertScheduler: LeaveAlertScheduler {
     var schedulesOnDevice: Bool { true }
     func requestAuthorization() async -> Bool { true }
+    func authorization() async -> AlertAuthorization { .allowed }
     func replaceAlerts(with alerts: [LeaveAlert]) async {}
 }
 

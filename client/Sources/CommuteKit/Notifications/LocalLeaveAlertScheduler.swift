@@ -14,6 +14,14 @@ public struct LocalLeaveAlertScheduler: LeaveAlertScheduler {
         (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])) ?? false
     }
 
+    public func authorization() async -> AlertAuthorization {
+        switch await UNUserNotificationCenter.current().notificationSettings().authorizationStatus {
+        case .notDetermined: .notDetermined
+        case .denied: .denied
+        default: .allowed
+        }
+    }
+
     public func replaceAlerts(with alerts: [LeaveAlert]) async {
         let center = UNUserNotificationCenter.current()
         let stale = await center.pendingNotificationRequests()

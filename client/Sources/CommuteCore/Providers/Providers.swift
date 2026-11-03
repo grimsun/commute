@@ -18,12 +18,22 @@ public protocol TrafficProvider: Sendable {
     func freeFlowCarETA(from: Coordinate, to: Coordinate) async throws -> TimeInterval
 }
 
+/// Whether the phone lets the app show alerts.
+public enum AlertAuthorization: Sendable {
+    /// Not asked yet; asking shows the system prompt.
+    case notDetermined
+    /// Turned off for the app in the iOS Settings app.
+    case denied
+    case allowed
+}
+
 /// Delivers get ready / leave now alerts. Standalone: local notifications. Server mode: the
 /// server pushes, so the app schedules nothing.
 public protocol LeaveAlertScheduler: Sendable {
     /// Whether this scheduler shows alerts on the phone itself.
     var schedulesOnDevice: Bool { get }
     func requestAuthorization() async -> Bool
+    func authorization() async -> AlertAuthorization
     /// Replaces every previously scheduled alert with `alerts`.
     func replaceAlerts(with alerts: [LeaveAlert]) async
 }
@@ -33,6 +43,7 @@ public struct NoopLeaveAlertScheduler: LeaveAlertScheduler {
 
     public var schedulesOnDevice: Bool { false }
     public func requestAuthorization() async -> Bool { true }
+    public func authorization() async -> AlertAuthorization { .allowed }
     public func replaceAlerts(with alerts: [LeaveAlert]) async {}
 }
 

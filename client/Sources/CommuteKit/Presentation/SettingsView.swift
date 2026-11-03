@@ -6,6 +6,7 @@ struct SettingsView: View {
     let viewModel: CommuteViewModel
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @State private var draft: CommuteProfile
     @State private var estimating: Set<String> = []
 
@@ -244,10 +245,38 @@ struct SettingsView: View {
                 .disabled(!draft.hasAddresses)
             Toggle("Get ready & leave now alerts", isOn: $draft.leaveAlertsEnabled)
                 .disabled(!draft.hasAddresses)
+            if draft.leaveAlertsEnabled && viewModel.alertAuthorization == .denied {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Notifications are off for Commute", systemImage: "bell.slash.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.orange)
+                    Text("Alerts are scheduled but won’t show until you allow notifications in the Settings app.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    #if os(iOS)
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                            openURL(url)
+                        }
+                    }
+                    .font(.subheadline)
+                    #endif
+                }
+                .padding(.vertical, 2)
+            }
         } header: {
             Text("Notifications")
         } footer: {
             Text(draft.hasAddresses ? alertsFooter : "Add your home and work addresses under Places to get leave reminders and the Lock Screen countdown.")
+        }
+        // Ask for permission as soon as alerts are turned on, so the answer shows here.
+        .onChange(of: draft.leaveAlertsEnabled) { _, isOn in
+            if isOn {
+                Task { await viewModel.requestAlertAuthorization() }
+            }
+        }
+        .task {
+            await viewModel.updateAlertAuthorization()
         }
     }
 

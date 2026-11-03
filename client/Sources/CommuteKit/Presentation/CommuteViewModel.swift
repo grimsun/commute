@@ -46,6 +46,8 @@ public final class CommuteViewModel {
     /// Which timetable runs on the day of the card's train ("Weekday schedule", holidays).
     public private(set) var scheduleDay: ScheduleDay?
     public private(set) var isUpdatingTimetable = false
+    /// Whether iOS lets leave alerts show; Settings warns when they're on but blocked.
+    public private(set) var alertAuthorization: AlertAuthorization = .allowed
     public private(set) var timetableError: String?
 
     /// Trips under way (and on which train) or ended by hand; saved in `departureLog`.
@@ -147,6 +149,7 @@ public final class CommuteViewModel {
             await loadDepartures()
             await refresh()
             didFinishLaunch = true
+            await updateAlertAuthorization()
             await rescheduleAlerts()
             await watchLocation()
         }
@@ -166,9 +169,24 @@ public final class CommuteViewModel {
             modeOverride.clear()
             scheduleKindChoice = nil
         }
+        // Notifications may have been turned on or off in the Settings app meanwhile.
+        await updateAlertAuthorization()
         await loadDepartures()
         await refresh()
         await rescheduleAlerts()
+    }
+
+    public func updateAlertAuthorization() async {
+        alertAuthorization = await services.alerts.authorization()
+    }
+
+    /// Shows the system prompt the first time alerts are turned on; afterwards it only reads the
+    /// current answer, which the rider changes in the Settings app.
+    public func requestAlertAuthorization() async {
+        if await services.alerts.authorization() == .notDetermined {
+            _ = await services.alerts.requestAuthorization()
+        }
+        alertAuthorization = await services.alerts.authorization()
     }
 
     /// `userInitiated` (the refresh button) may fetch live data sooner than the automatic cadence.
@@ -526,10 +544,10 @@ public final class CommuteViewModel {
         if newProfile.usesLocation, !previous.usesLocation {
             await watchLocation()
         }
+        // Alerts stay on even if iOS blocks them: they're scheduled anyway and start showing once
+        // notifications are allowed; Settings says so meanwhile.
         if newProfile.leaveAlertsEnabled, !previous.leaveAlertsEnabled, services.alerts.schedulesOnDevice {
-            if !(await services.alerts.requestAuthorization()) {
-                profile.leaveAlertsEnabled = false
-            }
+            await requestAlertAuthorization()
         }
 
         await profileStore.saveProfile(profile)
