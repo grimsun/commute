@@ -55,6 +55,8 @@ public actor OpenMeteoWeather: WeatherProviding {
             URLQueryItem(name: "longitude", value: String(format: "%.4f", coordinate.longitude)),
             URLQueryItem(name: "hourly", value: "precipitation_probability,precipitation,weather_code,temperature_2m,is_day"),
             URLQueryItem(name: "timeformat", value: "unixtime"),
+            // Days start at Caltrain's midnight, so today's morning stays in the forecast all day.
+            URLQueryItem(name: "timezone", value: Calendar.caltrain.timeZone.identifier),
             URLQueryItem(name: "forecast_days", value: "3")
         ]
         return components.url!

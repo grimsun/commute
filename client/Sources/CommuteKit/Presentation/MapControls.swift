@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// The commute / schedule switch (left) and, in schedule mode, which day's trains (right).
+/// The commute / schedule switch (left) and, on the right, the day's weather in commute mode or
+/// which day's trains in schedule mode.
 struct MapControls: View {
     let viewModel: CommuteViewModel
     let onModeChange: () -> Void
@@ -27,7 +28,11 @@ struct MapControls: View {
 
             Spacer()
 
-            if let day = viewModel.scheduleDay {
+            let moments = viewModel.weatherMoments
+            if !moments.isEmpty {
+                WeatherStrip(moments: moments, now: viewModel.currentDate())
+                    .transition(.opacity)
+            } else if let day = viewModel.scheduleDay {
                 ScheduleKindPill(day: day, isSchedule: viewModel.mode == .schedule) {
                     Task { await viewModel.toggleScheduleKind() }
                 }

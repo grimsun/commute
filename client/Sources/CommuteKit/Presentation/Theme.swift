@@ -84,6 +84,19 @@ enum Format {
         }
     }
 
+    /// "7:12", without AM/PM, where space is short.
+    static func shortTime(_ date: Date) -> String {
+        shortTimeFormatter.string(from: date)
+    }
+
+    private static let shortTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = Calendar.caltrain.timeZone
+        formatter.dateFormat = "h:mm"
+        return formatter
+    }()
+
     /// "Saturday".
     static func weekday(_ date: Date) -> String {
         date.formatted(Date.FormatStyle(timeZone: Calendar.caltrain.timeZone).weekday(.wide))

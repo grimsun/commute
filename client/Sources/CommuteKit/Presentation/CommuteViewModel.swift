@@ -74,8 +74,11 @@ public final class CommuteViewModel {
     private var didFinishLaunch = false
     private var carEstimates: [Direction: (option: CarOption?, at: Date)] = [:]
     private let weather: WeatherProviding?
-    /// Rain forecasts at the home and work addresses.
+    /// Forecasts at the home and work addresses.
     private var forecasts = CommuteForecasts()
+    /// The day the weather strip covers, with its morning and evening plans; re-planned when the
+    /// day or the profile changes.
+    private var weatherDay: (day: Int, profile: CommuteProfile, plans: [Direction: CommutePlan])?
     private static let carEstimateLifetime: TimeInterval = 5 * 60
     /// A direction flipped by hand, kept until the current trip changes (see `CommuteWindow`).
     private var directionOverride = ManualOverride<Direction, CommuteKey>()
@@ -391,7 +394,7 @@ public final class CommuteViewModel {
 
     /// Fetches the home and work forecasts; the provider caches them, so this is cheap to repeat.
     private func updateForecasts() async {
-        guard let weather, profile.rainWarningsEnabled else { return }
+        guard let weather, profile.weatherEnabled else { return }
         @Sendable func fetch(_ coordinate: Coordinate?) async -> WeatherForecast? {
             guard let coordinate else { return nil }
             return await weather.forecast(at: coordinate)
@@ -399,16 +402,40 @@ public final class CommuteViewModel {
         async let home = fetch(profile.home.coordinate)
         async let work = fetch(profile.work.coordinate)
         let fetched = await CommuteForecasts(home: home, work: work)
+        await updateWeatherDay()
         // Only on change, so an unchanged forecast doesn't redraw the card or re-plan the alerts.
         guard fetched != forecasts else { return }
         forecasts = fetched
         await rescheduleAlerts()
     }
 
+    /// The day of the trip on the card, planned from three hours before each target like the
+    /// alerts, so the strip shows that day's trains even once a trip is over.
+    private func updateWeatherDay() async {
+        guard let departure = commutePlans[direction]?.train?.train.departureTime else { return }
+        let day = DateKey.key(for: departure)
+        guard weatherDay?.day != day || weatherDay?.profile != profile else { return }
+        let planner = CommutePlanner(transit: services.transit, traffic: nil)
+        var plans: [Direction: CommutePlan] = [:]
+        for direction in Direction.allCases {
+            let target = profile.targetLeave(for: direction).date(on: departure, calendar: .caltrain)
+            plans[direction] = try? await planner.plan(profile: profile, direction: direction, now: target.addingTimeInterval(-3 * 3600))
+        }
+        weatherDay = (day, profile, plans)
+    }
+
+    /// Leaving home, getting to work, leaving work and getting home on the card's day, in
+    /// Commute; empty without a forecast.
+    public var weatherMoments: [WeatherMoment] {
+        guard profile.weatherEnabled, mode == .commute, profile.hasAddresses, let weatherDay else { return [] }
+        let moments = forecasts.moments(toWork: weatherDay.plans[.homeToWork], toHome: weatherDay.plans[.workToHome])
+        return moments.contains { $0.hour != nil } ? moments : []
+    }
+
     /// Rain on the way to or from a station for the trip on the card, and for the trip back later
     /// that day, while the rider can still do something about it.
     public var rainWarnings: [RainWarning] {
-        guard profile.rainWarningsEnabled, mode == .commute, profile.hasAddresses else { return [] }
+        guard profile.weatherEnabled, mode == .commute, profile.hasAddresses else { return [] }
         let date = now()
         let plans = commutePlans
         guard let current = plans[direction], let day = current.train?.train.departureTime else { return [] }
@@ -843,7 +870,7 @@ public final class CommuteViewModel {
         }
         let date = now()
         let leaving = await LeaveAlertPlanner(transit: services.transit)
-            .alerts(profile: profile, now: date, skipping: trips.departed, picks: picks, forecasts: profile.rainWarningsEnabled ? forecasts : nil)
+            .alerts(profile: profile, now: date, skipping: trips.departed, picks: picks, forecasts: profile.weatherEnabled ? forecasts : nil)
         // On board: a heads-up just before the rider's stop.
         let arriving = LeaveAlertPlanner.arrivingAlerts(trips: trips, plans: commutePlans, preferred: profile.preferredServices, now: date)
         await scheduler.replaceAlerts(with: leaving + arriving)

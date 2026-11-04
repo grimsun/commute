@@ -292,11 +292,11 @@ struct SettingsView: View {
 
     private var weatherSection: some View {
         Section {
-            Toggle("Rain warnings", isOn: $draft.rainWarningsEnabled)
+            Toggle("Weather", isOn: $draft.weatherEnabled)
         } header: {
             Text("Weather")
         } footer: {
-            Text("Warns on the card and in the get ready alert when rain is likely while you’re getting to or from a station, at home or at work. Forecast from Open-Meteo.")
+            Text("In Commute, the top right shows the weather for leaving home, getting to work, leaving work and getting home. The card and the get ready alert warn when rain is likely on the way to or from a station. Forecast from Open-Meteo.")
         }
     }
 
