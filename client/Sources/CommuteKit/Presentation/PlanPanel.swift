@@ -11,9 +11,9 @@ struct PlanPanel: View {
     let onOpenSettings: () -> Void
     /// Refresh in the header; also recenters the map.
     let onRefresh: () -> Void
-    /// Reports the height of the collapsed content (and whether it is the loading card) so the
-    /// sheet can fit it exactly.
-    let onCollapsedHeightChange: (CGFloat, Bool) -> Void
+    /// Reports the height of the collapsed content, whether it is the loading card, and which
+    /// mode's card it is, so the sheet can fit both exactly.
+    let onCollapsedHeightChange: (CGFloat, Bool, AppMode) -> Void
     /// Reports the height of the compact content: the card's train line and times.
     let onCompactHeightChange: (CGFloat) -> Void
     /// Called after the rider sets a train as target, e.g. to collapse the sheet onto it.
@@ -105,7 +105,7 @@ struct PlanPanel: View {
                         .padding(.top, isCompact ? Self.compactTopPadding : 14)
                         .id(Self.topID)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                            onCollapsedHeightChange(height, plan == nil)
+                            onCollapsedHeightChange(height, plan == nil, isSchedule ? .schedule : .commute)
                         }
 
                         // Always laid out, below the fitted card, so dragging the sheet up shows the

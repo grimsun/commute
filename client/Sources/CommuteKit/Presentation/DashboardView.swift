@@ -16,11 +16,15 @@ public struct DashboardView: View {
     private var isExpanded: Bool { panel == .expanded }
     /// Applied once loaded: the sheet settles at its first detent while it is being presented.
     private let initialPanel: PanelSize
-    /// Collapsed height fitted to the card; see `fitCollapsed`. One for both modes, since a sheet
-    /// snaps rather than glides to a new height, and remembered across launches, so the sheet
-    /// opens at its final size and doesn't jump when the loading card is replaced.
-    @State private var fittedHeight: CGFloat? = Self.savedHeight()
-    private static let heightKey = "commute.sheetHeight.v2"
+    /// Collapsed height fitted to each mode's card; see `fitCollapsed`. The sheet uses the larger,
+    /// since it snaps rather than glides to a new height: switching modes never resizes it, even the
+    /// first time. Remembered across launches, so the sheet opens at its final size and doesn't jump
+    /// when the loading card is replaced.
+    @State private var fittedHeights: [AppMode: CGFloat] = Self.savedHeights()
+    private var fittedHeight: CGFloat? { fittedHeights.values.max() }
+    private static let heightsKey = "commute.sheetHeights.v3"
+    /// The single height saved before heights were kept per mode.
+    private static let legacyHeightKey = "commute.sheetHeight.v2"
     /// From the full-size loading card, until the real card is measured.
     @State private var placeholderHeight: CGFloat = 380
     /// Set while the sheet is moving anyway (launch, settling at collapsed): the next measurement
@@ -43,9 +47,18 @@ public struct DashboardView: View {
         fittedHeight ?? placeholderHeight
     }
 
-    private static func savedHeight() -> CGFloat? {
-        let saved = UserDefaults.standard.double(forKey: heightKey)
-        return saved > 0 ? saved : nil
+    private static func savedHeights() -> [AppMode: CGFloat] {
+        let defaults = UserDefaults.standard
+        if let saved = defaults.dictionary(forKey: heightsKey) as? [String: Double] {
+            return Dictionary(uniqueKeysWithValues: saved.compactMap { key, value in AppMode(rawValue: key).map { ($0, CGFloat(value)) } })
+        }
+        // The old single height fitted whichever card was taller, so it stands for both.
+        let legacy = defaults.double(forKey: legacyHeightKey)
+        return legacy > 0 ? [.commute: legacy, .schedule: legacy] : [:]
+    }
+
+    private func saveHeights() {
+        UserDefaults.standard.set(Dictionary(uniqueKeysWithValues: fittedHeights.map { ($0.key.rawValue, Double($0.value)) }), forKey: Self.heightsKey)
     }
 
     private var collapsedDetent: PresentationDetent {
@@ -75,9 +88,9 @@ public struct DashboardView: View {
         }
     }
 
-    /// Fits the card on launch and whenever the sheet settles at collapsed; in between it only
+    /// Fits `mode`'s card on launch and whenever the sheet settles at collapsed; in between it only
     /// grows, so the sheet keeps one size as lines come and go and as the mode switches.
-    private func fitCollapsed(contentHeight: CGFloat, isPlaceholder: Bool) {
+    private func fitCollapsed(contentHeight: CGFloat, isPlaceholder: Bool, mode: AppMode) {
         // Only the collapsed layout counts: expanded adds stops, compact hides the header.
         guard panel == .collapsed else { return }
         // The sheet floats above the home indicator, so the detent can be a little shorter than the
@@ -85,9 +98,11 @@ public struct DashboardView: View {
         let fitted = min(max((contentHeight - 16).rounded(), 200), 620)
         if isPlaceholder {
             placeholderHeight = fitted
-        } else if refitsOnMeasure ? abs(fitted - (fittedHeight ?? 0)) > 1 : fitted > (fittedHeight ?? 0) + 1 {
-            fittedHeight = fitted
-            UserDefaults.standard.set(Double(fitted), forKey: Self.heightKey)
+        } else {
+            let current = fittedHeights[mode] ?? 0
+            guard refitsOnMeasure ? abs(fitted - current) > 1 : fitted > current + 1 else { return }
+            fittedHeights[mode] = fitted
+            saveHeights()
         }
     }
 
@@ -130,8 +145,8 @@ public struct DashboardView: View {
                 isSettingsPresented = true
             }, onRefresh: {
                 recenterRequest += 1
-            }, onCollapsedHeightChange: { contentHeight, isPlaceholder in
-                fitCollapsed(contentHeight: contentHeight, isPlaceholder: isPlaceholder)
+            }, onCollapsedHeightChange: { contentHeight, isPlaceholder, mode in
+                fitCollapsed(contentHeight: contentHeight, isPlaceholder: isPlaceholder, mode: mode)
             }, onCompactHeightChange: { contentHeight in
                 compactHeight = (contentHeight - 16).rounded()
             }, onPickTrain: {
