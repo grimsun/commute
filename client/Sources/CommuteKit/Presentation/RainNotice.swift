@@ -42,6 +42,6 @@ struct RainNotice: View {
     /// " · 70%", left out when rain is expected from the amount alone.
     private static func chance(_ warnings: [RainWarning]) -> String {
         let probability = warnings.map(\.probability).max() ?? 0
-        return probability >= RainForecast.likelyProbability ? " · \(probability)%" : ""
+        return probability >= WeatherForecast.likelyProbability ? " · \(probability)%" : ""
     }
 }

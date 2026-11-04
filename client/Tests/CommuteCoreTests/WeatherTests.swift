@@ -24,7 +24,8 @@ final class WeatherTests: XCTestCase {
         let times = [at(19, 8), at(19, 9), at(19, 10)].map { Int($0.timeIntervalSince1970) }
         return Data("""
         {"latitude":37.79,"longitude":-122.41,"hourly_units":{"time":"unixtime"},
-         "hourly":{"time":\(times),"precipitation_probability":[10,70,null],"precipitation":[0.0,0.8,null]}}
+         "hourly":{"time":\(times),"precipitation_probability":[10,70,null],"precipitation":[0.0,0.8,null],
+                   "weather_code":[2,63,null],"temperature_2m":[11.5,10.2,null],"is_day":[0,1,1]}}
         """.utf8)
     }
 
@@ -35,6 +36,29 @@ final class WeatherTests: XCTestCase {
         XCTAssertEqual(forecast.hours.map(\.probability), [10, 70, 0])
         XCTAssertEqual(forecast.hours[1].millimeters, 0.8)
         XCTAssertEqual(forecast.hours.map(\.isRainLikely), [false, true, false])
+        XCTAssertEqual(forecast.hours.map(\.condition), [.partlyCloudy, .rain, nil])
+        XCTAssertEqual(forecast.hours[0].temperature, 11.5)
+        XCTAssertEqual(forecast.hours.map(\.isDaylight), [false, true, true])
+    }
+
+    func testFourMomentsFromTheDaysPlans() async throws {
+        var profile = CommuteProfile.default
+        profile.homeStationMinutes = 10
+        profile.workStationMinutes = 10
+        let planner = { (trains: [TrainDeparture]) in CommutePlanner(transit: FixedTransitProvider(departures: trains), traffic: nil, calendar: self.calendar) }
+        // Morning 8:20 → 9:00; evening 17:45 → 18:25.
+        let morning = TrainDeparture(tripID: "103", trainNumber: "103", service: .local, scheduledDeparture: at(19, 8, 20), scheduledArrival: at(19, 9))
+        let evening = TrainDeparture(tripID: "150", trainNumber: "150", service: .local, scheduledDeparture: at(19, 17, 45), scheduledArrival: at(19, 18, 25))
+        let toWork = try await planner([morning]).plan(profile: profile, direction: .homeToWork, now: at(19, 6))
+        let toHome = try await planner([evening]).plan(profile: profile, direction: .workToHome, now: at(19, 15))
+        let home = try OpenMeteoWeather.parse(forecastJSON(), fetchedAt: at(19, 6)) // 7–10 AM
+
+        let moments = CommuteForecasts(home: home).moments(toWork: toWork, toHome: toHome)
+        XCTAssertEqual(moments.map(\.kind), [.leaveHome, .arriveWork, .leaveWork, .arriveHome])
+        XCTAssertEqual(moments.map(\.time), [at(19, 8, 7), at(19, 9, 10), at(19, 17, 32), at(19, 18, 35)])
+        XCTAssertEqual(moments[0].hour?.condition, .rain, "leaving home 8:07, in the 8–9 hour")
+        XCTAssertNil(moments[1].hour, "no work forecast")
+        XCTAssertNil(moments[3].hour, "home forecast ends at 10")
     }
 
     func testRainOnlyInOverlappingHours() throws {
@@ -54,7 +78,7 @@ final class WeatherTests: XCTestCase {
         let plan = try await CommutePlanner(transit: FixedTransitProvider(departures: [train]), traffic: nil, calendar: calendar)
             .plan(profile: profile, direction: .homeToWork, now: at(19, 6))
         let wet = try OpenMeteoWeather.parse(forecastJSON(), fetchedAt: at(19, 6)) // rain 8–9
-        let dry = RainForecast(hours: [], fetchedAt: at(19, 6))
+        let dry = WeatherForecast(hours: [], fetchedAt: at(19, 6))
 
         let leaving = RainWarning.warnings(for: plan, origin: wet, destination: dry)
         XCTAssertEqual(leaving, [RainWarning(direction: .homeToWork, leg: .toStation, time: at(19, 8, 7), probability: 70)])

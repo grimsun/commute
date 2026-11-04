@@ -392,7 +392,7 @@ public final class CommuteViewModel {
     /// Fetches the home and work forecasts; the provider caches them, so this is cheap to repeat.
     private func updateForecasts() async {
         guard let weather, profile.rainWarningsEnabled else { return }
-        @Sendable func fetch(_ coordinate: Coordinate?) async -> RainForecast? {
+        @Sendable func fetch(_ coordinate: Coordinate?) async -> WeatherForecast? {
             guard let coordinate else { return nil }
             return await weather.forecast(at: coordinate)
         }

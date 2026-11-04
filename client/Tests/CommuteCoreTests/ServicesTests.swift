@@ -177,7 +177,7 @@ final class LeaveAlertPlannerTests: XCTestCase {
 
     func testGetReadyMentionsRainOnTheWay() async {
         let (planner, profile) = alertPlanner() // leave 8:07, at the station 8:17
-        let rain = RainForecast(hours: [RainForecast.Hour(start: at(19, 8), probability: 80, millimeters: 1.2)], fetchedAt: at(19, 6))
+        let rain = WeatherForecast(hours: [WeatherForecast.Hour(start: at(19, 8), probability: 80, millimeters: 1.2)], fetchedAt: at(19, 6))
 
         let wet = await planner.alerts(profile: profile, now: at(19, 6), forecasts: CommuteForecasts(home: rain))
         XCTAssertTrue(wet[0].body.hasSuffix(LeaveAlertPlanner.rainNote))

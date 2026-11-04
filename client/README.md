@@ -32,7 +32,7 @@ services when the data source changes.
   - `Timetable/`: ZIP reader, CSV and GTFS parsing, `Timetable` queries, `TimetableStore` (memory + disk cache, download on first use)
   - `Providers/`: provider protocols, timetable / server / fallback providers, `CommuteServices` factory, fixed and sample providers for tests and previews
   - `Storage/`: profile persistence, the trip log behind `TripRecord`
-  - `Weather/`: `OpenMeteoWeather` (hourly rain forecasts), `RainForecast`, `RainWarning` (rain on a trip's ways to and from its stations)
+  - `Weather/`: `OpenMeteoWeather` (hourly rain forecasts), `WeatherForecast`, `RainWarning` (rain on a trip's ways to and from its stations)
 - `Sources/CommuteKit/`: Apple-platform layer, re-exports `CommuteCore`
   - `MapKit/`: car ETAs and travel-time estimates from Apple Maps
   - `Notifications/`: local leave alerts

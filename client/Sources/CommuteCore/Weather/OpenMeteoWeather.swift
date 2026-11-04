@@ -1,6 +1,6 @@
 import Foundation
 
-/// Rain forecasts from Open-Meteo (free, no key). Each place is fetched at most every
+/// Hourly forecasts from Open-Meteo (free, no key). Each place is fetched at most every
 /// `cacheLifetime`, with a backoff after failures; the last good forecast is kept meanwhile.
 public actor OpenMeteoWeather: WeatherProviding {
     public static let baseURL = URL(string: "https://api.open-meteo.com/v1/forecast")!
@@ -8,7 +8,7 @@ public actor OpenMeteoWeather: WeatherProviding {
     public static let failureBackoff: TimeInterval = 10 * 60
 
     private struct Entry {
-        var forecast: RainForecast?
+        var forecast: WeatherForecast?
         var attemptedAt: Date
     }
 
@@ -21,7 +21,7 @@ public actor OpenMeteoWeather: WeatherProviding {
         self.now = now
     }
 
-    public func forecast(at coordinate: Coordinate) async -> RainForecast? {
+    public func forecast(at coordinate: Coordinate) async -> WeatherForecast? {
         // About 1 km: close enough for the same forecast.
         let key = String(format: "%.2f,%.2f", coordinate.latitude, coordinate.longitude)
         let date = now()
@@ -53,7 +53,7 @@ public actor OpenMeteoWeather: WeatherProviding {
         components.queryItems = [
             URLQueryItem(name: "latitude", value: String(format: "%.4f", coordinate.latitude)),
             URLQueryItem(name: "longitude", value: String(format: "%.4f", coordinate.longitude)),
-            URLQueryItem(name: "hourly", value: "precipitation_probability,precipitation"),
+            URLQueryItem(name: "hourly", value: "precipitation_probability,precipitation,weather_code,temperature_2m,is_day"),
             URLQueryItem(name: "timeformat", value: "unixtime"),
             URLQueryItem(name: "forecast_days", value: "3")
         ]
@@ -65,21 +65,28 @@ public actor OpenMeteoWeather: WeatherProviding {
             var time: [TimeInterval]
             var precipitation_probability: [Int?]?
             var precipitation: [Double?]?
+            var weather_code: [Int?]?
+            var temperature_2m: [Double?]?
+            var is_day: [Int?]?
         }
         var hourly: Hourly
     }
 
-    /// Open-Meteo's hourly values cover the hour before each timestamp.
-    static func parse(_ data: Data, fetchedAt: Date) throws -> RainForecast {
+    /// Open-Meteo's rain values cover the hour before each timestamp; the sky and temperature
+    /// are for the timestamp itself, close enough to stand for that hour too.
+    static func parse(_ data: Data, fetchedAt: Date) throws -> WeatherForecast {
         let hourly = try JSONDecoder().decode(Response.self, from: data).hourly
         let hours = hourly.time.indices.map { index in
-            RainForecast.Hour(
+            WeatherForecast.Hour(
                 start: Date(timeIntervalSince1970: hourly.time[index] - 3600),
                 probability: hourly.precipitation_probability?[safe: index].flatMap { $0 } ?? 0,
-                millimeters: hourly.precipitation?[safe: index].flatMap { $0 } ?? 0
+                millimeters: hourly.precipitation?[safe: index].flatMap { $0 } ?? 0,
+                condition: hourly.weather_code?[safe: index].flatMap { $0 }.flatMap(WeatherCondition.init(wmoCode:)),
+                temperature: hourly.temperature_2m?[safe: index].flatMap { $0 },
+                isDaylight: (hourly.is_day?[safe: index].flatMap { $0 } ?? 1) == 1
             )
         }
-        return RainForecast(hours: hours, fetchedAt: fetchedAt)
+        return WeatherForecast(hours: hours, fetchedAt: fetchedAt)
     }
 }
 

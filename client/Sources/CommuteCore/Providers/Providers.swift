@@ -20,7 +20,7 @@ public protocol TrafficProvider: Sendable {
 
 /// Hourly rain forecasts; `nil` when none is available (offline, say).
 public protocol WeatherProviding: Sendable {
-    func forecast(at coordinate: Coordinate) async -> RainForecast?
+    func forecast(at coordinate: Coordinate) async -> WeatherForecast?
 }
 
 /// Whether the phone lets the app show alerts.
