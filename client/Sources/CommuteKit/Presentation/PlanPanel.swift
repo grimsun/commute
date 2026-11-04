@@ -226,10 +226,8 @@ struct PlanPanel: View {
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .rotationEffect(.degrees(refreshSpin))
-                    .frame(width: 36, height: 36)
-                    .contentShape(Circle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HeaderIconButtonStyle())
             .disabled(!viewModel.isLoaded)
             .accessibilityLabel("Refresh and recenter")
 
@@ -256,10 +254,8 @@ struct PlanPanel: View {
                 Image(systemName: "gearshape.fill")
                     .font(.title3)
                     .foregroundStyle(.secondary)
-                    .frame(width: 36, height: 36)
-                    .contentShape(Circle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HeaderIconButtonStyle())
             .disabled(!viewModel.isLoaded)
             .accessibilityLabel("Settings")
         }
@@ -369,5 +365,18 @@ struct PanelPhase: Hashable {
         trainID = plan.train?.train.id
         urgency = plan.train.map { Urgency(attempts: $0.attempts, now: now) }
         rows = includesRows ? plan.upcoming.map { "\($0.id):\(RowStatus(train: $0, plan: plan, now: now))" } : []
+    }
+}
+
+/// The header's round icon buttons (refresh, settings): a faint circle so they read as buttons,
+/// darker and a little smaller while pressed.
+private struct HeaderIconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(width: 36, height: 36)
+            .background(Circle().fill(configuration.isPressed ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.quinary)))
+            .contentShape(Circle())
+            .scaleEffect(configuration.isPressed ? 0.88 : 1)
+            .animation(.spring(duration: 0.2), value: configuration.isPressed)
     }
 }
