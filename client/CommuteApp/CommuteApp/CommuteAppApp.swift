@@ -19,6 +19,7 @@ struct CommuteAppApp: App {
             access: MapKitStationAccessProvider(),
             location: DeviceLocationProvider(),
             liveActivity: SystemLiveActivities(),
+            weather: OpenMeteoWeather(),
             now: DebugLaunch.clock
         )
         #if DEBUG

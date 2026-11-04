@@ -83,7 +83,7 @@ struct PlanPanel: View {
                                 header
                             }
                             if let plan {
-                                HeroCard(plan: plan, profile: routeProfile, now: now, tripInProgress: tripInProgress, isSchedule: isSchedule, isOtherDay: isOtherDay, elsewhereTrain: tripInProgress == nil ? elsewhereTrain : nil, missedOption: missedOption, path: trainPath, showsStops: isExpanded, isCompact: isCompact,
+                                HeroCard(plan: plan, profile: routeProfile, now: now, tripInProgress: tripInProgress, isSchedule: isSchedule, isOtherDay: isOtherDay, elsewhereTrain: tripInProgress == nil ? elsewhereTrain : nil, missedOption: missedOption, path: trainPath, rainWarnings: isSchedule ? [] : viewModel.rainWarnings, showsStops: isExpanded, isCompact: isCompact,
                                          onTopHeightChange: { height in
                                              // Plus the card's padding and the space above it.
                                              onCompactHeightChange(height + 32 + Self.compactTopPadding)

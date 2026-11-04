@@ -28,6 +28,7 @@ struct SettingsView: View {
                 scheduleSection
                 alertsSection
                 locationSection
+                weatherSection
                 trainTypesSection
                 carSection
                 appearanceSection
@@ -287,6 +288,16 @@ struct SettingsView: View {
 
     private var alertsFooter: String {
         "Scheduled a week ahead from the timetable, so they arrive even if the app stays closed. Before a trip, the app checks Caltrain’s live delays in the background and moves them (with Background App Refresh on). With location access, a trip’s remaining alerts stop once you’ve left."
+    }
+
+    private var weatherSection: some View {
+        Section {
+            Toggle("Rain warnings", isOn: $draft.rainWarningsEnabled)
+        } header: {
+            Text("Weather")
+        } footer: {
+            Text("Warns on the card and in the get ready alert when rain is likely while you’re getting to or from a station, at home or at work. Forecast from Open-Meteo.")
+        }
     }
 
     private var locationSection: some View {

@@ -48,6 +48,9 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
     /// Light, dark, or following the system.
     public var appearance: Appearance
 
+    /// Warn on the card and in alerts when rain is likely while getting to or from a station.
+    public var rainWarningsEnabled: Bool
+
     /// The last stations looked up in schedule mode; `nil` starts from the commute stations.
     public var scheduleRoute: StationRoute?
 
@@ -104,6 +107,7 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         liveActivityEnabled: Bool = true,
         usesLocation: Bool = true,
         appearance: Appearance = .system,
+        rainWarningsEnabled: Bool = true,
         scheduleRoute: StationRoute? = nil
     ) {
         self.home = home
@@ -126,6 +130,7 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         self.liveActivityEnabled = liveActivityEnabled
         self.usesLocation = usesLocation
         self.appearance = appearance
+        self.rainWarningsEnabled = rainWarningsEnabled
         self.scheduleRoute = scheduleRoute
     }
 
@@ -186,7 +191,7 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case home, work, homeStationID, workStationID, accessMode, bikeSpeedKph, homeStationMinutes, workStationMinutes
         case stationSafetyBufferMinutes, prepLeadTimeMinutes, morningTargetLeave, eveningTargetLeave, commuteDays
-        case preferredServices, carGoodDeltaMinutes, leaveAlertsEnabled, dataSource, liveActivityEnabled, usesLocation, appearance, scheduleRoute
+        case preferredServices, carGoodDeltaMinutes, leaveAlertsEnabled, dataSource, liveActivityEnabled, usesLocation, appearance, rainWarningsEnabled, scheduleRoute
         case otherModeMinutes
     }
 
@@ -213,6 +218,7 @@ public struct CommuteProfile: Codable, Equatable, Sendable {
         liveActivityEnabled = try c.decodeIfPresent(Bool.self, forKey: .liveActivityEnabled) ?? d.liveActivityEnabled
         usesLocation = try c.decodeIfPresent(Bool.self, forKey: .usesLocation) ?? d.usesLocation
         appearance = try c.decodeIfPresent(Appearance.self, forKey: .appearance) ?? d.appearance
+        rainWarningsEnabled = try c.decodeIfPresent(Bool.self, forKey: .rainWarningsEnabled) ?? d.rainWarningsEnabled
         scheduleRoute = try c.decodeIfPresent(StationRoute.self, forKey: .scheduleRoute)
         otherModeMinutes = try c.decodeIfPresent(StationMinutes.self, forKey: .otherModeMinutes)
     }

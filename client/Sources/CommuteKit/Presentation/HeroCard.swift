@@ -23,6 +23,8 @@ struct HeroCard: View {
     private var isNeutral: Bool { isElsewhere || isSchedule }
     /// Stops and track of the card's train, when loaded.
     var path: TrainPath? = nil
+    /// Rain on this trip's way to or from a station, or on the trip back later that day.
+    var rainWarnings: [RainWarning] = []
     /// Expanded sheet: the card adds the train's stops.
     var showsStops = false
     /// Compact sheet: only the train line and its times.
@@ -195,6 +197,10 @@ struct HeroCard: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                             .accessibilityIdentifier("journey")
+                        if !rainWarnings.isEmpty {
+                            RainNotice(warnings: rainWarnings, direction: plan.direction)
+                                .transition(.opacity)
+                        }
                     }
                 }
             }

@@ -73,6 +73,10 @@ public final class CommuteViewModel {
     /// and are kept a few minutes instead of being asked for on every refresh.
     private var didFinishLaunch = false
     private var carEstimates: [Direction: (option: CarOption?, at: Date)] = [:]
+    private let weather: WeatherProviding?
+    /// Rain forecasts at the home and work addresses.
+    private var homeForecast: RainForecast?
+    private var workForecast: RainForecast?
     private static let carEstimateLifetime: TimeInterval = 5 * 60
     /// A direction flipped by hand, kept until the current trip changes (see `CommuteWindow`).
     private var directionOverride = ManualOverride<Direction, CommuteKey>()
@@ -117,8 +121,10 @@ public final class CommuteViewModel {
         departureLog: DepartureLog = DepartureLog(),
         location: LocationProviding? = nil,
         liveActivity: LiveActivityUpdating? = nil,
+        weather: WeatherProviding? = nil,
         now: @escaping () -> Date = Date.init
     ) {
+        self.weather = weather
         self.profileStore = profileStore
         self.timetable = timetable
         self.factory = factory
@@ -264,6 +270,7 @@ public final class CommuteViewModel {
             errorMessage = Self.message(for: error)
         }
         Task { await updateCarEstimates(at: date) }
+        Task { await updateForecasts() }
         timetableInfo = await timetable.info()
         scheduleDay = await timetable.scheduleDay(for: plan?.train?.train.departureTime ?? date)
         await loadPaths()
@@ -380,6 +387,47 @@ public final class CommuteViewModel {
                 plans[.commute(direction)]?.car = option
             }
         }
+    }
+
+    /// Fetches the home and work forecasts; the provider caches them, so this is cheap to repeat.
+    private func updateForecasts() async {
+        guard let weather, profile.rainWarningsEnabled else { return }
+        @Sendable func fetch(_ coordinate: Coordinate?) async -> RainForecast? {
+            guard let coordinate else { return nil }
+            return await weather.forecast(at: coordinate)
+        }
+        async let home = fetch(profile.home.coordinate)
+        async let work = fetch(profile.work.coordinate)
+        let (newHome, newWork) = await (home, work)
+        // Only on change, so an unchanged forecast doesn't redraw the card.
+        if newHome != homeForecast { homeForecast = newHome }
+        if newWork != workForecast { workForecast = newWork }
+    }
+
+    /// Rain on the way to or from a station for the trip on the card, and for the trip back later
+    /// that day, while the rider can still do something about it.
+    public var rainWarnings: [RainWarning] {
+        guard profile.rainWarningsEnabled, mode == .commute, profile.hasAddresses else { return [] }
+        let date = now()
+        let plans = commutePlans
+        guard let current = plans[direction], let day = current.train?.train.departureTime else { return [] }
+        var trips = [current]
+        if let back = plans[direction.reversed], let departure = back.train?.train.departureTime,
+           departure > day, Calendar.caltrain.isDate(departure, inSameDayAs: day) {
+            trips.append(back)
+        }
+        return trips.flatMap { plan in
+            RainWarning.warnings(for: plan, origin: forecast(at: plan.direction == .homeToWork ? .home : .work),
+                                 destination: forecast(at: plan.direction == .homeToWork ? .work : .home))
+        }
+        // A leg already behind the rider doesn't matter any more.
+        .filter { $0.time.addingTimeInterval(30 * 60) > date }
+    }
+
+    private enum PlaceKind { case home, work }
+
+    private func forecast(at place: PlaceKind) -> RainForecast? {
+        place == .home ? homeForecast : workForecast
     }
 
     /// How close a departure must be before live delays are worth a request.
