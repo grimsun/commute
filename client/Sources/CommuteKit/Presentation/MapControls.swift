@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The commute / schedule switch (left) and, on the right, the day's weather in commute mode or
-/// which day's trains in schedule mode.
+/// The commute / schedule switch (left) and the day's weather (right). Without a forecast,
+/// Commute shows which timetable runs instead; Schedule switches it from the sheet's header.
 struct MapControls: View {
     let viewModel: CommuteViewModel
     let onModeChange: () -> Void
@@ -32,7 +32,7 @@ struct MapControls: View {
             if !moments.isEmpty {
                 WeatherStrip(moments: moments, now: viewModel.currentDate())
                     .transition(.opacity)
-            } else if let day = viewModel.scheduleDay {
+            } else if viewModel.mode == .commute, let day = viewModel.scheduleDay {
                 ScheduleKindPill(day: day, isSchedule: viewModel.mode == .schedule) {
                     Task { await viewModel.toggleScheduleKind() }
                 }

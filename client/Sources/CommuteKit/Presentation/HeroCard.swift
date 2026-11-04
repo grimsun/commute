@@ -35,6 +35,9 @@ struct HeroCard: View {
     var onTakeTrain: ((TrainDeparture) -> Void)? = nil
     /// "End trip": not travelling after all.
     var onEndTrip: (() -> Void)? = nil
+    /// Schedule mode: each end's time and station pick that end's station (`true` for the origin).
+    /// `nil` keeps the stations fixed.
+    var onPickStation: ((_ isOrigin: Bool, _ stationID: String) -> Void)? = nil
     /// The arrow between the times flips the direction (or swaps the stations).
     var onToggleDirection: (() -> Void)? = nil
     /// Sets a train as the target, from the "better train" hint.
@@ -105,23 +108,27 @@ struct HeroCard: View {
                 // Two rows, so the arrow sits on the times' line and the ride length on the stations'.
                 Grid(horizontalSpacing: 10, verticalSpacing: 1) {
                     GridRow {
-                        timeText(train.departureTime)
+                        stationPicker(isOrigin: true) { timeText(train.departureTime) }
                             .gridColumnAlignment(.leading)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         directionArrow
-                        timeText(train.arrivalTime)
+                        stationPicker(isOrigin: false) { timeText(train.arrivalTime) }
                             .gridColumnAlignment(.trailing)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                     GridRow {
-                        stationText(plan.originStation.name, time: train.departureTime, scheduled: train.scheduledDeparture)
+                        stationPicker(isOrigin: true) {
+                            stationText(plan.originStation.name, time: train.departureTime, scheduled: train.scheduledDeparture)
+                        }
                         Text(Format.minutes(train.arrivalTime.timeIntervalSince(train.departureTime)))
                             .monospacedDigit()
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .fixedSize()
-                        stationText(plan.destinationStation.name, time: train.arrivalTime, scheduled: train.scheduledArrival)
+                        stationPicker(isOrigin: false) {
+                            stationText(plan.destinationStation.name, time: train.arrivalTime, scheduled: train.scheduledArrival)
+                        }
                     }
                 }
             }
@@ -464,22 +471,59 @@ struct HeroCard: View {
     private func timeText(_ time: Date) -> some View {
         Text(Format.time(time))
             .font(.title.weight(.semibold))
+            .foregroundStyle(.primary)
             .monospacedDigit()
             .lineLimit(1)
             .minimumScaleFactor(0.7)
     }
 
-    /// The station, after the struck-through timetable time when the train runs late.
+    /// The station, after the struck-through timetable time when the train runs late. In Schedule
+    /// it's blue with a chevron: it picks the station.
     private func stationText(_ station: String, time: Date, scheduled: Date) -> some View {
         HStack(spacing: 4) {
             if abs(time.timeIntervalSince(scheduled)) >= 60 {
                 Text(Format.time(scheduled))
                     .strikethrough()
+                    .foregroundStyle(.secondary)
             }
             Text(station)
+                .foregroundStyle(onPickStation == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
+            if onPickStation != nil {
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.tint)
+            }
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
+        .font(onPickStation == nil ? .caption : .caption.weight(.semibold))
         .lineLimit(1)
+    }
+
+    /// In Schedule, a menu of every station around `label`; otherwise just `label`.
+    @ViewBuilder
+    private func stationPicker(isOrigin: Bool, @ViewBuilder label: () -> some View) -> some View {
+        if let onPickStation {
+            let selected = isOrigin ? plan.originStation : plan.destinationStation
+            Menu {
+                Picker(isOrigin ? "From" : "To", selection: Binding {
+                    selected.id
+                } set: { id in
+                    onPickStation(isOrigin, id)
+                }) {
+                    ForEach(StationCatalog.all) { station in
+                        Text(station.name).tag(station.id)
+                    }
+                }
+            } label: {
+                label()
+                    .contentShape(Rectangle())
+            }
+            // Plain, so the time keeps its color; only the station name is blue.
+            .buttonStyle(.plain)
+            .accessibilityLabel(isOrigin ? "From" : "To")
+            .accessibilityValue(selected.name)
+            .accessibilityHint("Picks the station")
+        } else {
+            label()
+        }
     }
 }

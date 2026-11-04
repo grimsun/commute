@@ -90,6 +90,7 @@ struct PlanPanel: View {
                                          },
                                          onTakeTrain: isSchedule ? nil : { train in Task { await viewModel.takeTrain(train) } },
                                          onEndTrip: isSchedule ? nil : { Task { await viewModel.endTrip() } },
+                                         onPickStation: isSchedule ? { isOrigin, id in pickStation(isOrigin: isOrigin, stationID: id) } : nil,
                                          onToggleDirection: { Task { await viewModel.toggleDirection() } }) { train in
                                     Task { await viewModel.pick(train) }
                                 }
@@ -207,9 +208,9 @@ struct PlanPanel: View {
 
     // MARK: Header
 
-    /// Refresh, the stations and settings; not tappable as a whole, since this is where people
-    /// grab the sheet. Schedule mode makes each station a menu of all stations. The direction
-    /// flips from the arrow on the card.
+    /// Refresh, the trip and day (Commute) or the timetable switch (Schedule), and settings; not
+    /// tappable as a whole, since this is where people grab the sheet. Stations are picked on the
+    /// card; the direction flips from the arrow on it.
     private var header: some View {
         HStack(spacing: 10) {
             Button {
@@ -234,10 +235,9 @@ struct PlanPanel: View {
 
             Group {
                 if viewModel.mode == .schedule {
-                    scheduleStations
+                    timetableButton
                 } else {
-                    // "San Francisco → Palo Alto" on one line (the card says "To work"); scales down rather than wrapping.
-                    Text(routeTitle)
+                    Text(tripTitle)
                         .font(.headline)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
@@ -265,56 +265,47 @@ struct PlanPanel: View {
         }
     }
 
-    private var routeTitle: String {
-        let route = viewModel.route
-        let from = StationCatalog.station(id: route.originStationID)?.name ?? "?"
-        let to = StationCatalog.station(id: route.destinationStationID)?.name ?? "?"
-        return "\(from) → \(to)"
+    /// "Going home · Tuesday": the trip and the day of its train (the card has the stations).
+    private var tripTitle: String {
+        let direction = viewModel.plan?.direction ?? viewModel.direction
+        let day = viewModel.plan?.train?.train.departureTime ?? viewModel.currentDate()
+        return "\(direction == .homeToWork ? "Going to work" : "Going home") · \(Format.weekday(day))"
     }
 
-    /// "Palo Alto ⌄ → San Francisco ⌄": each name picks any station.
-    private var scheduleStations: some View {
-        let route = viewModel.scheduleRoute
-        return HStack(spacing: 6) {
-            stationMenu(route.originStationID, label: "From") { id in
-                // Picking the other end's station swaps the two.
-                id == route.destinationStationID ? route.reversed : StationRoute(originStationID: id, destinationStationID: route.destinationStationID)
-            }
-            Image(systemName: "arrow.right")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.tertiary)
-            stationMenu(route.destinationStationID, label: "To") { id in
-                id == route.originStationID ? route.reversed : StationRoute(originStationID: route.originStationID, destinationStationID: id)
-            }
-        }
-    }
-
-    private func stationMenu(_ selectedID: String, label: String, route: @escaping (String) -> StationRoute) -> some View {
-        Menu {
-            Picker(label, selection: Binding {
-                selectedID
-            } set: { id in
-                Task { await viewModel.setScheduleRoute(route(id)) }
-            }) {
-                ForEach(StationCatalog.all) { station in
-                    Text(station.name).tag(station.id)
+    /// "Weekday timetable ⌃⌄": flips to the next day running the other timetable and back.
+    @ViewBuilder
+    private var timetableButton: some View {
+        if let day = viewModel.scheduleDay {
+            let title = day.holidayName == nil ? day.kind.rawValue.capitalized : "Holiday"
+            Button {
+                Task { await viewModel.toggleScheduleKind() }
+            } label: {
+                HStack(spacing: 5) {
+                    Text("\(title) timetable")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .contentTransition(.opacity)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.tint)
                 }
+                .contentShape(Rectangle())
             }
-        } label: {
-            HStack(spacing: 3) {
-                Text(StationCatalog.station(id: selectedID)?.name ?? "?")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.tint)
-            }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityLabel("Timetable")
+            .accessibilityValue(title)
+            .accessibilityHint("Switches between weekday and weekend trains")
+            .accessibilityIdentifier("schedule-kind")
         }
-        .accessibilityLabel(label)
-        .accessibilityValue(StationCatalog.station(id: selectedID)?.name ?? "")
+    }
+
+    /// Schedule: picking `stationID` for one end; picking the other end's station swaps the two.
+    private func pickStation(isOrigin: Bool, stationID id: String) {
+        let route = viewModel.scheduleRoute
+        let new = isOrigin
+            ? (id == route.destinationStationID ? route.reversed : StationRoute(originStationID: id, destinationStationID: route.destinationStationID))
+            : (id == route.originStationID ? route.reversed : StationRoute(originStationID: route.originStationID, destinationStationID: id))
+        Task { await viewModel.setScheduleRoute(new) }
     }
 
     // MARK: Cards

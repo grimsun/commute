@@ -424,10 +424,10 @@ public final class CommuteViewModel {
         weatherDay = (day, profile, plans)
     }
 
-    /// Leaving home, getting to work, leaving work and getting home on the card's day, in
-    /// Commute; empty without a forecast.
+    /// Leaving home, getting to work, leaving work and getting home on the commute's day, in
+    /// either mode; empty without a forecast.
     public var weatherMoments: [WeatherMoment] {
-        guard profile.weatherEnabled, mode == .commute, profile.hasAddresses, let weatherDay else { return [] }
+        guard profile.weatherEnabled, profile.hasAddresses, let weatherDay else { return [] }
         let moments = forecasts.moments(toWork: weatherDay.plans[.homeToWork], toHome: weatherDay.plans[.workToHome])
         return moments.contains { $0.hour != nil } ? moments : []
     }
