@@ -26,6 +26,31 @@ struct CommuteMapView: View {
     @State private var position: MapCameraPosition = .automatic
     @State private var trainPosition: TrainPosition?
 
+    /// The lines and pins, built once per set of inputs rather than on every body pass: the train
+    /// marker redraws the map once a second, and the track runs to thousands of points.
+    private struct Geometry {
+        var fullLine: [CLLocationCoordinate2D] = []
+        var railLine: [CLLocationCoordinate2D]?
+        var accessLegs: [[CLLocationCoordinate2D]] = []
+        var pins: [Pin] = []
+    }
+
+    private var geometry = Geometry()
+
+    init(profile: CommuteProfile, isSchedule: Bool, bottomInset: CGFloat, recenterRequest: Int = 0, trainPath: TrainPath? = nil,
+         trainDelay: TimeInterval = 0, isLive: Bool = false, now: @escaping () -> Date = Date.init, isVisible: Bool = true) {
+        self.profile = profile
+        self.isSchedule = isSchedule
+        self.bottomInset = bottomInset
+        self.recenterRequest = recenterRequest
+        self.trainPath = trainPath
+        self.trainDelay = trainDelay
+        self.isLive = isLive
+        self.now = now
+        self.isVisible = isVisible
+        geometry = Geometry(fullLine: fullLine, railLine: railLine, accessLegs: accessLegs, pins: pins)
+    }
+
     private var homeStation: Station? { StationCatalog.station(id: profile.homeStationID) }
     private var workStation: Station? { StationCatalog.station(id: profile.workStationID) }
 
@@ -41,17 +66,17 @@ struct CommuteMapView: View {
     var body: some View {
         Map(position: $position) {
             // The train's whole run, faint, so it is on a line before and after the ride.
-            MapPolyline(coordinates: fullLine)
+            MapPolyline(coordinates: geometry.fullLine)
                 .stroke(Color.red.opacity(0.3), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
-            if let railLine {
+            if let railLine = geometry.railLine {
                 MapPolyline(coordinates: railLine)
                     .stroke(Color.red.opacity(0.85), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
             }
-            ForEach(accessLegs.indices, id: \.self) { index in
-                MapPolyline(coordinates: accessLegs[index])
+            ForEach(geometry.accessLegs.indices, id: \.self) { index in
+                MapPolyline(coordinates: geometry.accessLegs[index])
                     .stroke(Color.blue, style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [5, 6]))
             }
-            ForEach(pins) { pin in
+            ForEach(geometry.pins) { pin in
                 // Centered on the coordinate. Stations are small stops on the line; home and work
                 // keep their icons, so the ends of the trip read first.
                 Annotation(pin.title, coordinate: pin.coordinate.clLocationCoordinate, anchor: .center) {
@@ -75,12 +100,19 @@ struct CommuteMapView: View {
                 position = .rect(boundingRect)
             }
         }
-        // Moves the train once a second; small steps read as gliding at map scale.
-        .task(id: "\(trainPath?.tripID ?? "")|\(isVisible)") {
+        // Moves the train once a second; small steps read as gliding at map scale. Only a real
+        // move redraws, so a train waiting at a station (or none at all) costs nothing.
+        .task(id: "\(trainPath?.tripID ?? "")|\(isVisible)|\(Int(trainDelay))") {
+            guard let trainPath else {
+                trainPosition = nil
+                return
+            }
             while isVisible && !Task.isCancelled {
-                let next = trainPath?.position(at: now(), delay: trainDelay)
-                withAnimation(.linear(duration: 1)) {
-                    trainPosition = next
+                let next = trainPath.position(at: now(), delay: trainDelay)
+                if next != trainPosition {
+                    withAnimation(.linear(duration: 1)) {
+                        trainPosition = next
+                    }
                 }
                 try? await Task.sleep(for: .seconds(1))
             }

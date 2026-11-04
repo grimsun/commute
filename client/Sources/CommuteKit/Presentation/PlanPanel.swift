@@ -47,8 +47,12 @@ struct PlanPanel: View {
             let delay = TimeInterval((viewModel.departedTrain ?? plan?.train?.train)?.delaySeconds ?? 0)
             instants += path.stops.flatMap { [$0.arrival.addingTimeInterval(delay), $0.departure.addingTimeInterval(delay)] }
         }
+        // Deadlines already passed never change what's shown again; leaving them out spares
+        // redraws, notably with live delays, whose times fall on any second.
+        let date = viewModel.currentDate()
+        instants = instants.filter { $0 > date }
         // The card's clock can run ahead of the real one (debug), so map onto the real clock.
-        let shift = viewModel.currentDate().timeIntervalSinceNow
+        let shift = date.timeIntervalSinceNow
         return ChangeSchedule(instants: instants.map { $0.addingTimeInterval(-shift) })
     }
 
