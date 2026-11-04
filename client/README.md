@@ -32,6 +32,7 @@ services when the data source changes.
   - `Timetable/`: ZIP reader, CSV and GTFS parsing, `Timetable` queries, `TimetableStore` (memory + disk cache, download on first use)
   - `Providers/`: provider protocols, timetable / server / fallback providers, `CommuteServices` factory, fixed and sample providers for tests and previews
   - `Storage/`: profile persistence, the trip log behind `TripRecord`
+  - `Weather/`: `OpenMeteoWeather` (hourly rain forecasts), `RainForecast`, `RainWarning` (rain on a trip's ways to and from its stations)
 - `Sources/CommuteKit/`: Apple-platform layer, re-exports `CommuteCore`
   - `MapKit/`: car ETAs and travel-time estimates from Apple Maps
   - `Notifications/`: local leave alerts
@@ -79,6 +80,10 @@ services when the data source changes.
   train's leave now alert in 5 seconds. Background app refresh (`lab.CommuteApp.alerts`) re-plans the week's
   alerts every 6 hours and about an hour before the next get ready / leave now, fetching live delays when a
   trip is within 90 minutes; iOS decides when it actually runs.
+- Rain warnings (Settings → Weather, on by default): Open-Meteo's hourly forecast for the home and work
+  addresses (free, no key; cached 30 min). Rain counts as likely at ≥ 50% or ≥ 0.3 mm in an hour, checked for
+  the ride to the station (origin's forecast, leave → platform) and from it (destination's, train arrival → door).
+  The card shows its trip's warning and the trip back later that day; the trip's first alert adds a rain note.
 - Settings → Appearance: System (default), Light or Dark, applied to the whole window.
 - The driving card shows driving now and how the traffic is. Tap it
   for driving directions in Apple Maps; touch and hold to choose Google Maps instead.
