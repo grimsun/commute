@@ -40,6 +40,30 @@ public struct RainForecast: Equatable, Sendable {
     }
 }
 
+/// The forecasts at both ends of the commute.
+public struct CommuteForecasts: Equatable, Sendable {
+    public var home: RainForecast?
+    public var work: RainForecast?
+
+    public init(home: RainForecast? = nil, work: RainForecast? = nil) {
+        self.home = home
+        self.work = work
+    }
+
+    public func origin(for direction: Direction) -> RainForecast? {
+        direction == .homeToWork ? home : work
+    }
+
+    public func destination(for direction: Direction) -> RainForecast? {
+        direction == .homeToWork ? work : home
+    }
+
+    /// Rain on `plan`'s ways to and from its stations.
+    public func warnings(for plan: CommutePlan) -> [RainWarning] {
+        RainWarning.warnings(for: plan, origin: origin(for: plan.direction), destination: destination(for: plan.direction))
+    }
+}
+
 /// Rain expected on one of a trip's outdoor legs: from the door to the station, or from the
 /// station to the door.
 public struct RainWarning: Equatable, Sendable {

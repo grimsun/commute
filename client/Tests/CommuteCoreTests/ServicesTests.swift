@@ -175,6 +175,18 @@ final class LeaveAlertPlannerTests: XCTestCase {
         XCTAssertEqual(LeaveAlertPlanner.nextRefresh(after: [], now: at(19, 9)), at(19, 15))
     }
 
+    func testGetReadyMentionsRainOnTheWay() async {
+        let (planner, profile) = alertPlanner() // leave 8:07, at the station 8:17
+        let rain = RainForecast(hours: [RainForecast.Hour(start: at(19, 8), probability: 80, millimeters: 1.2)], fetchedAt: at(19, 6))
+
+        let wet = await planner.alerts(profile: profile, now: at(19, 6), forecasts: CommuteForecasts(home: rain))
+        XCTAssertTrue(wet[0].body.hasSuffix(LeaveAlertPlanner.rainNote))
+        XCTAssertFalse(wet[1].body.contains("Rain"), "only the trip's first alert")
+
+        let dry = await planner.alerts(profile: profile, now: at(19, 6), forecasts: CommuteForecasts(work: rain))
+        XCTAssertFalse(dry[0].body.contains("Rain"), "at work only after 9:00")
+    }
+
     func testNoAlertsOnNonCommuteDays() async {
         let (planner, profile) = alertPlanner()
         let alerts = await planner.alerts(profile: profile, now: at(20, 6), days: 6) // Tue through Sun

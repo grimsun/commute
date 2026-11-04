@@ -75,8 +75,7 @@ public final class CommuteViewModel {
     private var carEstimates: [Direction: (option: CarOption?, at: Date)] = [:]
     private let weather: WeatherProviding?
     /// Rain forecasts at the home and work addresses.
-    private var homeForecast: RainForecast?
-    private var workForecast: RainForecast?
+    private var forecasts = CommuteForecasts()
     private static let carEstimateLifetime: TimeInterval = 5 * 60
     /// A direction flipped by hand, kept until the current trip changes (see `CommuteWindow`).
     private var directionOverride = ManualOverride<Direction, CommuteKey>()
@@ -202,6 +201,7 @@ public final class CommuteViewModel {
         if let feed = services.liveFeed, await isTripSoon(at: date) {
             await feed.refreshIfDue()
         }
+        await updateForecasts()
         await rescheduleAlerts()
     }
 
@@ -398,10 +398,11 @@ public final class CommuteViewModel {
         }
         async let home = fetch(profile.home.coordinate)
         async let work = fetch(profile.work.coordinate)
-        let (newHome, newWork) = await (home, work)
-        // Only on change, so an unchanged forecast doesn't redraw the card.
-        if newHome != homeForecast { homeForecast = newHome }
-        if newWork != workForecast { workForecast = newWork }
+        let fetched = await CommuteForecasts(home: home, work: work)
+        // Only on change, so an unchanged forecast doesn't redraw the card or re-plan the alerts.
+        guard fetched != forecasts else { return }
+        forecasts = fetched
+        await rescheduleAlerts()
     }
 
     /// Rain on the way to or from a station for the trip on the card, and for the trip back later
@@ -416,18 +417,9 @@ public final class CommuteViewModel {
            departure > day, Calendar.caltrain.isDate(departure, inSameDayAs: day) {
             trips.append(back)
         }
-        return trips.flatMap { plan in
-            RainWarning.warnings(for: plan, origin: forecast(at: plan.direction == .homeToWork ? .home : .work),
-                                 destination: forecast(at: plan.direction == .homeToWork ? .work : .home))
-        }
+        return trips.flatMap { forecasts.warnings(for: $0) }
         // A leg already behind the rider doesn't matter any more.
         .filter { $0.time.addingTimeInterval(30 * 60) > date }
-    }
-
-    private enum PlaceKind { case home, work }
-
-    private func forecast(at place: PlaceKind) -> RainForecast? {
-        place == .home ? homeForecast : workForecast
     }
 
     /// How close a departure must be before live delays are worth a request.
@@ -851,7 +843,7 @@ public final class CommuteViewModel {
         }
         let date = now()
         let leaving = await LeaveAlertPlanner(transit: services.transit)
-            .alerts(profile: profile, now: date, skipping: trips.departed, picks: picks)
+            .alerts(profile: profile, now: date, skipping: trips.departed, picks: picks, forecasts: profile.rainWarningsEnabled ? forecasts : nil)
         // On board: a heads-up just before the rider's stop.
         let arriving = LeaveAlertPlanner.arrivingAlerts(trips: trips, plans: commutePlans, preferred: profile.preferredServices, now: date)
         await scheduler.replaceAlerts(with: leaving + arriving)

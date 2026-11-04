@@ -58,7 +58,8 @@ public struct LeaveAlertPlanner: Sendable {
     }
 
     /// `picks` are trains the rider chose for specific commutes; their alerts follow those trains.
-    public func alerts(profile: CommuteProfile, now: Date, days: Int = 7, skipping departed: Set<CommuteKey> = [], picks: [CommuteKey: String] = [:]) async -> [LeaveAlert] {
+    /// With `forecasts`, a trip's first alert mentions rain on its way to or from a station.
+    public func alerts(profile: CommuteProfile, now: Date, days: Int = 7, skipping departed: Set<CommuteKey> = [], picks: [CommuteKey: String] = [:], forecasts: CommuteForecasts? = nil) async -> [LeaveAlert] {
         var alerts: [LeaveAlert] = []
         let today = calendar.startOfDay(for: now)
 
@@ -76,8 +77,11 @@ public struct LeaveAlertPlanner: Sendable {
                       let option = plan.train,
                       calendar.isDate(option.train.departureTime, inSameDayAs: day) else { continue }
 
-                alerts += Self.alerts(for: option, plan: plan, key: key, includeGetReady: profile.prepLeadTimeMinutes > 0)
-                    .filter { $0.fireDate > now }
+                var tripAlerts = Self.alerts(for: option, plan: plan, key: key, includeGetReady: profile.prepLeadTimeMinutes > 0)
+                if let forecasts, !forecasts.warnings(for: plan).isEmpty, !tripAlerts.isEmpty {
+                    tripAlerts[0].body += " " + Self.rainNote
+                }
+                alerts += tripAlerts.filter { $0.fireDate > now }
             }
         }
 
@@ -118,6 +122,8 @@ public struct LeaveAlertPlanner: Sendable {
         }
         return alerts
     }
+
+    public static let rainNote = "Rain likely on the way: bring a rain jacket."
 
     /// Background refresh runs at least this often, so alerts stay a week ahead.
     public static let refreshInterval: TimeInterval = 6 * 3600
