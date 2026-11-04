@@ -57,11 +57,12 @@ services when the data source changes.
   to clear the override.
   A manual target expires when it can no longer be caught or its commute window ends.
 - Two modes, switched with the control at the top left. **Commute** plans leaving home and work as above.
-  **Schedule** shows the next trains between any two stations (tap either station name to change it),
-  with no travel time or buffer; the stations are remembered. In Schedule the pill at the top right names the
-  timetable on screen (Weekday, Weekend or Holiday); a tap flips to the other one, showing the next
-  such day at the same time, and back to today. In Commute the top right shows the day's weather instead
-  (the timetable label when there's no forecast). The arrow between the card's times
+  **Schedule** shows the next trains between any two stations (tap a time or the blue station name
+  under it on the card to change that end), with no travel time or buffer; the stations are remembered.
+  The sheet's header says "Going home · Tuesday" in Commute; in Schedule it's the timetable on screen
+  ("Weekday timetable", Weekend or Holiday), and a tap flips to the other one, showing the next such day
+  at the same time, and back to today. The top right shows the commute day's weather in both modes
+  (in Commute, the timetable label when there's no forecast). The arrow between the card's times
   switches direction in Commute and swaps the stations in Schedule; refresh is at the left of the header. The app opens in Commute
   from two hours before a target leave time until its four-hour window ends, on commute days that
   aren't holidays, and in Schedule otherwise. A switch by hand lasts until that changes or the app
