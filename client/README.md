@@ -32,7 +32,7 @@ services when the data source changes.
   - `Timetable/`: ZIP reader, CSV and GTFS parsing, `Timetable` queries, `TimetableStore` (memory + disk cache, download on first use)
   - `Providers/`: provider protocols, timetable / server / fallback providers, `CommuteServices` factory, fixed and sample providers for tests and previews
   - `Storage/`: profile persistence, the trip log behind `TripRecord`
-  - `Weather/`: `OpenMeteoWeather` (hourly rain forecasts), `WeatherForecast`, `RainWarning` (rain on a trip's ways to and from its stations)
+  - `Weather/`: `OpenMeteoWeather` (hourly forecasts), `WeatherForecast` (rain, sky, temperature), `WeatherMoment` (the day's four moments outside), `RainWarning` (rain on a trip's ways to and from its stations)
 - `Sources/CommuteKit/`: Apple-platform layer, re-exports `CommuteCore`
   - `MapKit/`: car ETAs and travel-time estimates from Apple Maps
   - `Notifications/`: local leave alerts
@@ -58,9 +58,10 @@ services when the data source changes.
   A manual target expires when it can no longer be caught or its commute window ends.
 - Two modes, switched with the control at the top left. **Commute** plans leaving home and work as above.
   **Schedule** shows the next trains between any two stations (tap either station name to change it),
-  with no travel time or buffer; the stations are remembered. The pill at the top right names the timetable
-  on screen (Weekday, Weekend or Holiday); in Schedule a tap flips to the other one, showing the next
-  such day at the same time, and back to today. In Commute it's only a label. The arrow between the card's times
+  with no travel time or buffer; the stations are remembered. In Schedule the pill at the top right names the
+  timetable on screen (Weekday, Weekend or Holiday); a tap flips to the other one, showing the next
+  such day at the same time, and back to today. In Commute the top right shows the day's weather instead
+  (the timetable label when there's no forecast). The arrow between the card's times
   switches direction in Commute and swaps the stations in Schedule; refresh is at the left of the header. The app opens in Commute
   from two hours before a target leave time until its four-hour window ends, on commute days that
   aren't holidays, and in Schedule otherwise. A switch by hand lasts until that changes or the app
@@ -80,7 +81,10 @@ services when the data source changes.
   train's leave now alert in 5 seconds. Background app refresh (`lab.CommuteApp.alerts`) re-plans the week's
   alerts every 6 hours and about an hour before the next get ready / leave now, fetching live delays when a
   trip is within 90 minutes; iOS decides when it actually runs.
-- Rain warnings (Settings → Weather, on by default): Open-Meteo's hourly forecast for the home and work
+- Weather strip (Commute, top right): four icons with times for leaving home, getting to work, leaving work
+  and getting home on the card's day, from that day's trains (planned from three hours before each target)
+  and the forecast at the home or work address; moments already past are dimmed.
+- Rain warnings (Settings → Weather, on by default, also turns the strip off): Open-Meteo's hourly forecast for the home and work
   addresses (free, no key; cached 30 min). Rain counts as likely at ≥ 50% or ≥ 0.3 mm in an hour, checked for
   the ride to the station (origin's forecast, leave → platform) and from it (destination's, train arrival → door).
   The card shows its trip's warning and the trip back later that day; the trip's first alert adds a rain note.
