@@ -18,6 +18,11 @@ public protocol TrafficProvider: Sendable {
     func freeFlowCarETA(from: Coordinate, to: Coordinate) async throws -> TimeInterval
 }
 
+/// Hourly rain forecasts; `nil` when none is available (offline, say).
+public protocol WeatherProviding: Sendable {
+    func forecast(at coordinate: Coordinate) async -> RainForecast?
+}
+
 /// Whether the phone lets the app show alerts.
 public enum AlertAuthorization: Sendable {
     /// Not asked yet; asking shows the system prompt.
