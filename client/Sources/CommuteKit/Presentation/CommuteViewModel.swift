@@ -635,6 +635,10 @@ public final class CommuteViewModel {
         profile = newProfile
         // Places or the traffic threshold may have changed.
         carEstimates = [:]
+        // A moved home or work keeps no forecast for the old address meanwhile.
+        if newProfile.home.coordinate != previous.home.coordinate || newProfile.work.coordinate != previous.work.coordinate {
+            forecasts = CommuteForecasts()
+        }
 
         if newProfile.dataSource != previous.dataSource {
             // Clear alerts the old implementation scheduled before switching.
