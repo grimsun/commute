@@ -85,7 +85,7 @@ services when the data source changes.
 - Weather strip (Commute, top right): four icons with times for leaving home, getting to work, leaving work
   and getting home on the card's day, from that day's trains (planned from three hours before each target)
   and the forecast at the home or work address; moments already past are dimmed.
-- Rain warnings (Settings → Weather, on by default, also turns the strip off): Open-Meteo's hourly forecast for the home and work
+- Rain warnings (Settings → Weather → Forecast & rain warnings, on by default; also turns the strip off): Open-Meteo's hourly forecast for the home and work
   addresses (free, no key; cached 30 min). Rain counts as likely at ≥ 50% or ≥ 0.3 mm in an hour, checked for
   the ride to the station (origin's forecast, leave → platform) and from it (destination's, train arrival → door).
   The card shows its trip's warning and the trip back later that day; the trip's first alert adds a rain note.

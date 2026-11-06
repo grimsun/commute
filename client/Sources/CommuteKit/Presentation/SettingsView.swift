@@ -65,7 +65,7 @@ struct SettingsView: View {
         } header: {
             Text("Train data")
         } footer: {
-            Text("Caltrain’s published timetable, with live delays from Caltrain near your trips. Alerts come from the app.")
+            Text("Caltrain’s timetable, with live delays near your trips.")
         }
     }
 
@@ -117,7 +117,7 @@ struct SettingsView: View {
             Text("Places")
         } footer: {
             if !draft.hasAddresses {
-                Text("Add both to turn on Commute mode: when to leave, leave reminders and the Lock Screen countdown. Until then, the app shows the schedule.")
+                Text("Needed for Commute mode, leave alerts and the Lock Screen countdown.")
             }
         }
     }
@@ -149,7 +149,7 @@ struct SettingsView: View {
                 Text("Home and work stations must differ.")
                     .foregroundStyle(.red)
             } else {
-                Text("Picking an address selects its nearest station. You can change it here.")
+                Text("Set from your addresses; change it if you ride from another stop.")
             }
         }
     }
@@ -189,8 +189,8 @@ struct SettingsView: View {
             Text("Travel times")
         } footer: {
             Text(draft.accessMode == .bike
-                 ? "Door to platform, including locking up your bike. Bike and walk keep their own times. Estimate asks Apple Maps; adjust to what you actually take."
-                 : "Door to platform on foot. Bike and walk keep their own times. Estimate asks Apple Maps; adjust to what you actually take.")
+                 ? "Door to platform, including locking up. Estimate uses Apple Maps."
+                 : "Door to platform on foot. Estimate uses Apple Maps.")
         }
     }
 
@@ -236,7 +236,7 @@ struct SettingsView: View {
         } header: {
             Text("Target leave times")
         } footer: {
-            Text("The plan follows the first train you can catch when leaving at the target time, then rolls to the next one if you miss it.")
+            Text("Follows the first train you can catch leaving then, and the next one if you miss it.")
         }
     }
 
@@ -251,7 +251,7 @@ struct SettingsView: View {
                     Label("Notifications are off for Commute", systemImage: "bell.slash.fill")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.orange)
-                    Text("Alerts are scheduled but won’t show until you allow notifications in the Settings app.")
+                    Text("Allow notifications in the Settings app to get alerts.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     #if os(iOS)
@@ -273,7 +273,7 @@ struct SettingsView: View {
         } header: {
             Text("Notifications")
         } footer: {
-            Text(draft.hasAddresses ? alertsFooter : "Add your home and work addresses under Places to get leave reminders and the Lock Screen countdown.")
+            Text(draft.hasAddresses ? alertsFooter : "Add home and work under Places first.")
         }
         // Ask for permission as soon as alerts are turned on, so the answer shows here.
         .onChange(of: draft.leaveAlertsEnabled) { _, isOn in
@@ -287,16 +287,16 @@ struct SettingsView: View {
     }
 
     private var alertsFooter: String {
-        "Scheduled a week ahead from the timetable, so they arrive even if the app stays closed. Before a trip, the app checks Caltrain’s live delays in the background and moves them (with Background App Refresh on). With location access, a trip’s remaining alerts stop once you’ve left."
+        "Even with the app closed, adjusted for live delays. They stop once you’ve left."
     }
 
     private var weatherSection: some View {
         Section {
-            Toggle("Weather", isOn: $draft.weatherEnabled)
+            Toggle("Forecast & rain warnings", isOn: $draft.weatherEnabled)
         } header: {
             Text("Weather")
         } footer: {
-            Text("In Commute, the top right shows the weather for leaving home, getting to work, leaving work and getting home. The card and the get ready alert warn when rain is likely on the way to or from a station. Forecast from Open-Meteo.")
+            Text("For leaving and arriving at home and work. From Open-Meteo.")
         }
     }
 
@@ -307,8 +307,8 @@ struct SettingsView: View {
             Text("Location")
         } footer: {
             Text(draft.usesLocation
-                 ? "While the app is open, your location shows when you’ve left home or work, or are already on a train. You can still tap On my way."
-                 : "Location isn’t used. Tap On my way on the card, or touch and hold a train and choose I’m taking this train.")
+                 ? "While the app is open, notices when you leave or board a train."
+                 : "Location isn’t used; tap On my way instead.")
         }
     }
 
@@ -328,7 +328,7 @@ struct SettingsView: View {
         } header: {
             Text("Train types")
         } footer: {
-            Text("Only these trains are planned for; others show as Skipped in the list. At least one type stays on.")
+            Text("Others show as Skipped. At least one stays on.")
         }
     }
 
@@ -338,7 +338,7 @@ struct SettingsView: View {
         } header: {
             Text("Car comparison")
         } footer: {
-            Text("Driving counts as good when it is at most this much slower than with no traffic.")
+            Text("How much slower than free-flow traffic still counts as good.")
         }
     }
 
