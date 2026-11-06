@@ -7,6 +7,9 @@ struct MapControls: View {
     let onModeChange: () -> Void
     let onNeedsAddresses: () -> Void
 
+    /// Bumped on each tap, so only the rider's switches tick, not automatic ones.
+    @State private var modeTaps = 0
+
     var body: some View {
         HStack {
             Button {
@@ -15,12 +18,14 @@ struct MapControls: View {
                     return
                 }
                 onModeChange()
+                modeTaps += 1
                 Task { await viewModel.toggleMode() }
             } label: {
                 ModeSwitch(mode: viewModel.mode)
             }
             .buttonStyle(.plain)
             .disabled(!viewModel.isLoaded)
+            .sensoryFeedback(.selection, trigger: modeTaps)
             .accessibilityLabel("Mode")
             .accessibilityValue(viewModel.mode.title)
             .accessibilityHint("Switches to \(viewModel.mode.other.title.lowercased())")

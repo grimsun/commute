@@ -18,6 +18,7 @@ struct WeatherStrip: View {
             strip
         }
         .buttonStyle(.plain)
+        .sensoryFeedback(.selection, trigger: showsTemperature)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Weather")
         .accessibilityValue(moments.map(Self.spoken).joined(separator: "; "))
