@@ -9,6 +9,8 @@ struct SettingsView: View {
     @Environment(\.openURL) private var openURL
     @State private var draft: CommuteProfile
     @State private var estimating: Set<String> = []
+    /// Until the test alert shows, the button says it's on its way.
+    @State private var isTestAlertPending = false
 
     init(viewModel: CommuteViewModel) {
         self.viewModel = viewModel
@@ -266,9 +268,15 @@ struct SettingsView: View {
                 .padding(.vertical, 2)
             }
             if draft.leaveAlertsEnabled && draft.hasAddresses {
-                Button("Send a test alert") {
-                    Task { await viewModel.sendTestAlert() }
+                Button(isTestAlertPending ? "Test alert in a few seconds…" : "Send a test alert") {
+                    isTestAlertPending = true
+                    Task {
+                        await viewModel.sendTestAlert()
+                        try? await Task.sleep(for: .seconds(5))
+                        isTestAlertPending = false
+                    }
                 }
+                .disabled(isTestAlertPending)
             }
         } header: {
             Text("Notifications")
