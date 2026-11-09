@@ -70,8 +70,10 @@ services when the data source changes.
   commute in either mode. Settings is the gear in the sheet header.
 - Automatic selection rolls forward for four hours after the target leave time, then moves to
   the next commute. Late evening windows continue across midnight. Tomorrow’s trains are labeled.
-- **On my way** (on the card within 90 minutes of the train) or **I’m taking this train** (touch and hold
-  a row once it's time to leave for it, even one that already left; earlier rows offer Pin instead) marks the trip by hand; **End trip** undoes it. Settings → Location
+- **On my way** (on the card within 90 minutes of the train, or on a get ready / leave now notification) or
+  **I’m taking this train** (touch and hold a row once it's time to leave for it, even one that already left;
+  earlier rows offer Pin instead) marks the trip by hand; **End trip** undoes it. The notification's button
+  opens the app, since iOS only lets an open app start the Lock Screen countdown, which then counts down to the train. Settings → Location
   → **Notice when I leave** turns automatic detection on or off; off, location is never used.
 - With location access (while using the app), leaving the starting place during a trip marks it as
   departed: the card shows "You're on your way" / "You're on the train" and that trip's alerts stop.
