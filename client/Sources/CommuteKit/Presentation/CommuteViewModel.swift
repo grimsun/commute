@@ -789,6 +789,32 @@ public final class CommuteViewModel {
         await markDeparted(on: train)
     }
 
+    /// "On my way" on a get ready or leave now alert: like the card's button, for the alert's
+    /// trip and train. The tap may have launched the app, so this waits for it to load first.
+    public func startTrip(_ key: CommuteKey, trainNumber: String) async {
+        while !didFinishLaunch {
+            try? await Task.sleep(for: .milliseconds(100))
+            if Task.isCancelled { return }
+        }
+        await loadDepartures()
+        let date = now()
+        guard !trips.isUnderWay(key),
+              let plan = plans[.commute(key.direction)], plan.key == key,
+              let train = plan.train(number: trainNumber),
+              date < plan.doorArrival(for: train) else { return }
+        // Show that trip on the card, even outside the usual commute hours.
+        let automaticMode = await automaticMode(at: date)
+        modeOverride.set(.commute, automatic: automaticMode, context: automaticMode)
+        let active = activeCommute(at: date)
+        directionOverride.set(key.direction, automatic: active.direction, context: active)
+        withAnimation(.smooth(duration: 0.35)) {
+            mode = .commute
+            direction = key.direction
+            trips.take(trainNumber, for: key)
+        }
+        await markDeparted(on: train)
+    }
+
     /// Not taking this trip after all (or location guessed wrong): back to the plan, with its
     /// alerts. Location won't mark it again.
     public func endTrip() async {

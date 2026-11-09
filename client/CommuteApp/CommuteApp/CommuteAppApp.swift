@@ -25,6 +25,9 @@ struct CommuteAppApp: App {
         #if DEBUG
         model.debugTripNumber = UserDefaults.standard.string(forKey: "debugTrip")
         #endif
+        LeaveAlertPresenter.shared.onMyWay = { commute, trainNumber in
+            await model.startTrip(commute, trainNumber: trainNumber)
+        }
         _viewModel = State(initialValue: model)
     }
 

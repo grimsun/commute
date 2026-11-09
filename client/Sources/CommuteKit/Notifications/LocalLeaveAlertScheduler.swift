@@ -53,16 +53,56 @@ public struct LocalLeaveAlertScheduler: LeaveAlertScheduler {
         content.sound = .default
         content.threadIdentifier = "\(alert.commute.day)-\(alert.commute.direction.rawValue)"
         content.interruptionLevel = alert.kind == .leaveNow ? .timeSensitive : .active
+        if alert.offersOnMyWay, let trainNumber = alert.trainNumber {
+            content.categoryIdentifier = OnMyWay.category
+            content.userInfo = OnMyWay.userInfo(commute: alert.commute, trainNumber: trainNumber)
+        }
         return content
     }
 }
 
-/// Shows leave alerts as banners even while the app is open.
+/// The "On my way" button on get ready and leave now alerts: it opens the app, which starts that
+/// trip like the card's button, so the Lock Screen countdown switches to the train.
+enum OnMyWay {
+    static let category = "trip"
+    static let action = "on-my-way"
+
+    static func userInfo(commute: CommuteKey, trainNumber: String) -> [String: Any] {
+        ["commuteDay": commute.day, "direction": commute.direction.rawValue, "trainNumber": trainNumber]
+    }
+
+    static func trip(from userInfo: [AnyHashable: Any]) -> (commute: CommuteKey, trainNumber: String)? {
+        guard let day = userInfo["commuteDay"] as? Int,
+              let direction = (userInfo["direction"] as? String).flatMap(Direction.init(rawValue:)),
+              let trainNumber = userInfo["trainNumber"] as? String else { return nil }
+        return (CommuteKey(day: day, direction: direction), trainNumber)
+    }
+}
+
+/// Shows leave alerts as banners even while the app is open, and handles their "On my way".
 public final class LeaveAlertPresenter: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
     public static let shared = LeaveAlertPresenter()
 
+    /// Called on the main actor when "On my way" is tapped; set once at launch.
+    @MainActor public var onMyWay: (@MainActor (CommuteKey, String) async -> Void)?
+
+    /// Before the app finishes launching, so a tap that launched it is delivered here.
     public func install() {
-        UNUserNotificationCenter.current().delegate = self
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        // Foreground: iOS only lets an open app start the Lock Screen countdown.
+        let onMyWay = UNNotificationAction(identifier: OnMyWay.action, title: "On my way", options: [.foreground], icon: UNNotificationActionIcon(systemImageName: "figure.walk"))
+        center.setNotificationCategories([UNNotificationCategory(identifier: OnMyWay.category, actions: [onMyWay], intentIdentifiers: [])])
+    }
+
+    public func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        guard response.actionIdentifier == OnMyWay.action,
+              let trip = OnMyWay.trip(from: response.notification.request.content.userInfo) else { return }
+        await startTrip(trip.commute, trainNumber: trip.trainNumber)
+    }
+
+    @MainActor private func startTrip(_ commute: CommuteKey, trainNumber: String) async {
+        await onMyWay?(commute, trainNumber)
     }
 
     public func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
