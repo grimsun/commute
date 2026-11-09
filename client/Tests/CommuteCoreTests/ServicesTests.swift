@@ -131,6 +131,17 @@ final class LeaveAlertPlannerTests: XCTestCase {
         XCTAssertEqual(Set(alerts.map(\.id)).count, 3)
     }
 
+    func testOnMyWayOnlyBeforeLeavingAndForTheAlertsTrain() async {
+        let (planner, profile) = alertPlanner()
+        let alerts = await planner.alerts(profile: profile, now: at(19, 6))
+
+        XCTAssertEqual(alerts.map(\.offersOnMyWay), [true, true, false])
+        XCTAssertEqual(alerts[0].trainNumber, "103")
+        XCTAssertEqual(alerts[1].trainNumber, "103")
+        let generic = LeaveAlertPlanner.testAlert(plan: nil, now: at(19, 6))
+        XCTAssertFalse(generic.offersOnMyWay, "no train to start a trip on")
+    }
+
     func testSkipsPastAlertsAndDepartedCommutes() async {
         let (planner, profile) = alertPlanner()
 

@@ -31,14 +31,22 @@ public struct LeaveAlert: Equatable, Sendable {
     public var fireDate: Date
     public var title: String
     public var body: String
+    /// The train a get ready or leave now alert is for, so "On my way" can start that trip.
+    public var trainNumber: String?
 
-    public init(commute: CommuteKey, kind: Kind, fireDate: Date, title: String, body: String) {
+    public init(commute: CommuteKey, kind: Kind, fireDate: Date, title: String, body: String, trainNumber: String? = nil) {
         self.id = "leave-\(commute.identifier)-\(kind.rawValue)"
         self.commute = commute
         self.kind = kind
         self.fireDate = fireDate
         self.title = title
         self.body = body
+        self.trainNumber = trainNumber
+    }
+
+    /// Get ready and leave now alerts offer "On my way"; the rest are past that point.
+    public var offersOnMyWay: Bool {
+        (kind == .getReady || kind == .leaveNow) && trainNumber != nil
     }
 }
 
@@ -100,7 +108,8 @@ public struct LeaveAlertPlanner: Sendable {
                 kind: .getReady,
                 fireDate: attempts.getReadyAt,
                 title: "Get ready: \(trainName) at \(train.departureTime.caltrainTime)",
-                body: "Leave at \(attempts.leaveAt.caltrainTime) to reach \(plan.originStation.name) on time."
+                body: "Leave at \(attempts.leaveAt.caltrainTime) to reach \(plan.originStation.name) on time.",
+                trainNumber: train.trainNumber
             ))
         }
         alerts.append(LeaveAlert(
@@ -108,7 +117,8 @@ public struct LeaveAlertPlanner: Sendable {
             kind: .leaveNow,
             fireDate: attempts.leaveAt,
             title: "Leave now for \(trainName)",
-            body: "Departs \(plan.originStation.name) \(train.departureTime.caltrainTime), arrives \(plan.destinationStation.name) \(train.arrivalTime.caltrainTime)."
+            body: "Departs \(plan.originStation.name) \(train.departureTime.caltrainTime), arrives \(plan.destinationStation.name) \(train.arrivalTime.caltrainTime).",
+            trainNumber: train.trainNumber
         ))
         if let next = option.fallback {
             let nextLeave = plan.attempts(for: next).leaveAt
