@@ -88,6 +88,9 @@ public struct LeaveAlertPlanner: Sendable {
                 var tripAlerts = Self.alerts(for: option, plan: plan, key: key, includeGetReady: profile.prepLeadTimeMinutes > 0)
                 if let forecasts, !forecasts.warnings(for: plan).isEmpty, !tripAlerts.isEmpty {
                     tripAlerts[0].body += " " + Self.rainNote
+                    if let dry = forecasts.dryTrain(for: plan, preferred: profile.preferredServices, now: tripAlerts[0].fireDate) {
+                        tripAlerts[0].body += " " + Self.dryNote(dry, plan: plan)
+                    }
                 }
                 alerts += tripAlerts.filter { $0.fireDate > now }
             }
@@ -134,6 +137,11 @@ public struct LeaveAlertPlanner: Sendable {
     }
 
     public static let rainNote = "Rain likely on the way: bring a rain jacket."
+
+    /// "Or stay dry on Local 112: leave by 8:01 AM."
+    static func dryNote(_ train: TrainDeparture, plan: CommutePlan) -> String {
+        "Or stay dry on \(train.service.displayName) \(train.trainNumber): leave by \(plan.attempts(for: train).leaveAt.caltrainTime)."
+    }
 
     /// Background refresh runs at least this often, so alerts stay a week ahead.
     public static let refreshInterval: TimeInterval = 6 * 3600
