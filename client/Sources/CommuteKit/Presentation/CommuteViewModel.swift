@@ -449,6 +449,14 @@ public final class CommuteViewModel {
         .filter { $0.time.addingTimeInterval(30 * 60) > date }
     }
 
+    /// With rain likely on the card's train, the closest train that keeps the rider dry; tapping it
+    /// pins it. Only before setting off.
+    public var dryTrain: TrainDeparture? {
+        guard profile.weatherEnabled, mode == .commute, profile.hasAddresses,
+              let plan = commutePlan, !trips.isUnderWay(plan.key), !isAwayFromStart else { return nil }
+        return forecasts.dryTrain(for: plan, preferred: profile.preferredServices, now: now())
+    }
+
     /// How close a departure must be before live delays are worth a request.
     static let liveDataLead: TimeInterval = 90 * 60
 

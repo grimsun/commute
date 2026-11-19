@@ -25,6 +25,8 @@ struct HeroCard: View {
     var path: TrainPath? = nil
     /// Rain on this trip's way to or from a station, or on the trip back later that day.
     var rainWarnings: [RainWarning] = []
+    /// A nearby train with dry ways to and from the stations; tapping it pins it.
+    var dryTrain: TrainDeparture? = nil
     /// Expanded sheet: the card adds the train's stops.
     var showsStops = false
     /// Compact sheet: only the train line and its times.
@@ -207,6 +209,21 @@ struct HeroCard: View {
                         if !rainWarnings.isEmpty {
                             RainNotice(warnings: rainWarnings, direction: plan.direction)
                                 .transition(.opacity)
+                        }
+                        if let dry = dryTrain, !hasDeparted, !isNeutral {
+                            Button {
+                                onPick(dry)
+                            } label: {
+                                Label(dryTrainText(dry), systemImage: "umbrella")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.tint)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                            }
+                            .buttonStyle(.plain)
+                            .transition(.opacity)
+                            .accessibilityHint("Pins this train")
+                            .accessibilityIdentifier("dry-train")
                         }
                     }
                 }
@@ -443,6 +460,11 @@ struct HeroCard: View {
     private func betterTrain(than option: TrainOption) -> TrainDeparture? {
         guard !isNeutral, !hasDeparted, !reservesMissedLine, missedOption == nil else { return nil }
         return plan.betterTrain(than: option.train, preferred: profile.preferredServices)
+    }
+
+    /// "Stay dry on Local 112 · leave by 8:01 AM"
+    private func dryTrainText(_ train: TrainDeparture) -> String {
+        "Stay dry on \(train.service.displayName) \(train.trainNumber) · leave by \(Format.time(plan.attempts(for: train).leaveAt))"
     }
 
     /// "Express 516 at 8:30 gets you there 14 min earlier"
