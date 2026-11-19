@@ -129,6 +129,30 @@ public struct CommuteForecasts: Equatable, Sendable {
     public func warnings(for plan: CommutePlan) -> [RainWarning] {
         RainWarning.warnings(for: plan, origin: origin(for: plan.direction), destination: destination(for: plan.direction))
     }
+
+    /// When rain is likely on the planned train's way to or from a station, the catchable train
+    /// closest to it (within `range` of its leave time) with both ways dry, so the rider can go a
+    /// bit earlier or later instead. `nil` when the plan is dry already, no train nearby is, or
+    /// the forecast doesn't reach that far.
+    public func dryTrain(for plan: CommutePlan, preferred: Set<TrainService>, now: Date, range: TimeInterval = 2 * 3600) -> TrainDeparture? {
+        let origin = origin(for: plan.direction), destination = destination(for: plan.direction)
+        guard let current = plan.train?.train, let origin, let destination,
+              !RainWarning.warnings(for: current, in: plan, origin: origin, destination: destination).isEmpty else { return nil }
+        let leave = plan.attempts(for: current).leaveAt
+        func distance(_ train: TrainDeparture) -> TimeInterval {
+            abs(plan.attempts(for: train).leaveAt.timeIntervalSince(leave))
+        }
+        return plan.upcoming
+            .filter { train in
+                train.id != current.id && train.isUsable(preferred: preferred) && plan.isCatchable(train, at: now)
+                    && distance(train) <= range
+                    // Known to be dry, not just past the forecast's end.
+                    && origin.hour(at: plan.attempts(for: train).leaveAt) != nil
+                    && destination.hour(at: plan.doorArrival(for: train)) != nil
+                    && RainWarning.warnings(for: train, in: plan, origin: origin, destination: destination).isEmpty
+            }
+            .min { distance($0) < distance($1) }
+    }
 }
 
 /// Rain expected on one of a trip's outdoor legs: from the door to the station, or from the
@@ -155,11 +179,16 @@ public struct RainWarning: Equatable, Sendable {
     /// Checks the plan's train: the ride to the station with the origin's forecast, the ride
     /// home or to work with the destination's. At most one warning per leg.
     public static func warnings(for plan: CommutePlan, origin: WeatherForecast?, destination: WeatherForecast?) -> [RainWarning] {
-        guard let option = plan.train else { return [] }
-        let leave = option.attempts.leaveAt
+        guard let train = plan.train?.train else { return [] }
+        return warnings(for: train, in: plan, origin: origin, destination: destination)
+    }
+
+    /// The same for any of the plan's trains.
+    public static func warnings(for train: TrainDeparture, in plan: CommutePlan, origin: WeatherForecast?, destination: WeatherForecast?) -> [RainWarning] {
+        let leave = plan.attempts(for: train).leaveAt
         let legs: [(Leg, WeatherForecast?, Date, Date)] = [
             (.toStation, origin, leave, leave.addingTimeInterval(plan.accessTime)),
-            (.fromStation, destination, option.train.arrivalTime, plan.doorArrival(for: option.train))
+            (.fromStation, destination, train.arrivalTime, plan.doorArrival(for: train))
         ]
         return legs.compactMap { leg, forecast, start, end in
             guard let hour = forecast?.rain(from: start, to: end) else { return nil }

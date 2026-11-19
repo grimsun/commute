@@ -88,6 +88,31 @@ final class WeatherTests: XCTestCase {
         XCTAssertTrue(RainWarning.warnings(for: plan, origin: nil, destination: nil).isEmpty)
     }
 
+    func testSuggestsTheClosestDryTrain() async throws {
+        var profile = CommuteProfile.default
+        profile.homeStationMinutes = 10
+        profile.workStationMinutes = 10
+        let trains = [7, 8, 9].map { hour in
+            TrainDeparture(tripID: "\(hour)", trainNumber: "\(hour)", service: .local, scheduledDeparture: at(19, hour, 20), scheduledArrival: at(19, hour + 1))
+        }
+        let plan = try await CommutePlanner(transit: FixedTransitProvider(departures: trains), traffic: nil, calendar: calendar)
+            .plan(profile: profile, direction: .homeToWork, now: at(19, 6))
+        XCTAssertEqual(plan.train?.train.trainNumber, "8")
+        func forecast(until end: Int, rainAt rainy: Int? = nil) -> WeatherForecast {
+            WeatherForecast(hours: (5..<end).map { WeatherForecast.Hour(start: at(19, $0), probability: $0 == rainy ? 80 : 0, millimeters: 0) }, fetchedAt: at(19, 5))
+        }
+        // Rain at home 8–9: leaving at 7:07 or 9:07 is dry; the earlier one is listed first.
+        let forecasts = CommuteForecasts(home: forecast(until: 12, rainAt: 8), work: forecast(until: 12))
+        XCTAssertEqual(forecasts.dryTrain(for: plan, preferred: profile.preferredServices, now: at(19, 6))?.trainNumber, "7")
+        // Too late for the 7:20: the later one.
+        XCTAssertEqual(forecasts.dryTrain(for: plan, preferred: profile.preferredServices, now: at(19, 7, 30))?.trainNumber, "9")
+        // A forecast that ends before 9:07 doesn't count as dry.
+        let short = CommuteForecasts(home: forecast(until: 9, rainAt: 8), work: forecast(until: 12))
+        XCTAssertNil(short.dryTrain(for: plan, preferred: profile.preferredServices, now: at(19, 7, 30)))
+        // No rain on the planned train: nothing to suggest.
+        XCTAssertNil(CommuteForecasts(home: forecast(until: 12), work: forecast(until: 12)).dryTrain(for: plan, preferred: profile.preferredServices, now: at(19, 6)))
+    }
+
     func testCachesForecastsAndKeepsThemThroughFailures() async {
         nonisolated(unsafe) var requests = 0
         nonisolated(unsafe) var clock = at(19, 6)
