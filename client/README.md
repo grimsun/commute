@@ -91,6 +91,9 @@ services when the data source changes.
   addresses (free, no key; cached 30 min). Rain counts as likely at ≥ 50% or ≥ 0.3 mm in an hour, checked for
   the ride to the station (origin's forecast, leave → platform) and from it (destination's, train arrival → door).
   The card shows its trip's warning and the trip back later that day; the trip's first alert adds a rain note.
+- Dry train: when the card's trip has a warning, the closest catchable preferred train within 2 hours of its
+  leave time whose ways to and from the stations are both dry (inside the forecast, not past its end) shows as
+  "Stay dry on Express 510 · leave by 8:12 AM"; a tap pins it. The rain note in the alert names it too.
 - Settings → Appearance: System (default), Light or Dark, applied to the whole window.
 - The driving card shows driving now and how the traffic is. Tap it
   for driving directions in Apple Maps; touch and hold to choose Google Maps instead.

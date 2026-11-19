@@ -52,7 +52,7 @@ Commute works backwards from the train, using how long *you* take to get to the 
 | 🔁 **Both directions** | Follows the morning trip until four hours after your target, then the evening one; tap the arrow on the card to switch by hand. |
 | 🚗 **Car check** | Driving time against free-flow traffic, for days when the train isn't the answer. Tap for directions in Apple Maps, or hold for Google Maps. |
 | 🌦️ **Weather** | In Commute, four icons at the top show the weather when you leave home, get to work, leave work and get home. |
-| 🌧️ **Rain warnings** | When rain is likely while you're getting to or from a station, at home or at work, the card says so, including for the trip back later that day, and the get ready alert reminds you to bring a jacket. Forecast from Open-Meteo. |
+| 🌧️ **Rain warnings** | When rain is likely while you're getting to or from a station, at home or at work, the card says so, including for the trip back later that day, and the get ready alert reminds you to bring a jacket. If a train a little earlier or later keeps you dry, the card suggests it, and a tap pins it. Forecast from Open-Meteo. |
 | 🌙 **Dark mode** | Follows the system, or stays light or dark (Settings → Appearance). |
 | ⚙️ **All 31 stations** | Pick an address and the nearest station is selected; override it if you ride to a faster stop. |
 
