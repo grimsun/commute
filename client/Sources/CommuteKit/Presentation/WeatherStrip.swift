@@ -2,12 +2,16 @@ import SwiftUI
 
 /// The day's weather at a glance: leaving home and getting to work, then leaving work and getting
 /// home, each with its time. Moments already past are dimmed. A tap switches between the sky and
-/// the temperature, remembered for next time.
+/// the temperature, remembered for next time; a long press offers the Weather app.
 struct WeatherStrip: View {
     let moments: [WeatherMoment]
     let now: Date
 
     @AppStorage("commute.weatherShowsTemperature") private var showsTemperature = false
+    @Environment(\.openURL) private var openURL
+
+    /// Apple's Weather app; not documented, but long supported.
+    private static let weatherAppURL = URL(string: "weather://")!
 
     var body: some View {
         Button {
@@ -18,6 +22,20 @@ struct WeatherStrip: View {
             strip
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                openURL(Self.weatherAppURL)
+            } label: {
+                Label("Open Weather", systemImage: "cloud.sun")
+            }
+            Button {
+                withAnimation(.smooth(duration: 0.25)) {
+                    showsTemperature.toggle()
+                }
+            } label: {
+                Label(showsTemperature ? "Show Sky" : "Show Temperatures", systemImage: showsTemperature ? "cloud" : "thermometer.medium")
+            }
+        }
         .sensoryFeedback(.selection, trigger: showsTemperature)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Weather")
