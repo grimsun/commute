@@ -113,6 +113,16 @@ final class WeatherTests: XCTestCase {
         XCTAssertNil(CommuteForecasts(home: forecast(until: 12), work: forecast(until: 12)).dryTrain(for: plan, preferred: profile.preferredServices, now: at(19, 6)))
     }
 
+    func testNextHoursStartOnTheHour() {
+        let forecast = WeatherForecast(hours: (5..<12).map { WeatherForecast.Hour(start: at(19, $0), probability: 0, millimeters: 0) }, fetchedAt: at(19, 5))
+
+        let moments = forecast.nextHours(after: at(19, 8, 46))
+        XCTAssertEqual(moments.map(\.time), [at(19, 9), at(19, 10), at(19, 11), at(19, 12)])
+        XCTAssertEqual(moments.map { $0.hour != nil }, [true, true, true, false], "past the forecast's end")
+        XCTAssertEqual(Set(moments.map(\.id)).count, 4)
+        XCTAssertTrue(forecast.nextHours(after: at(19, 13)).isEmpty)
+    }
+
     func testCachesForecastsAndKeepsThemThroughFailures() async {
         nonisolated(unsafe) var requests = 0
         nonisolated(unsafe) var clock = at(19, 6)

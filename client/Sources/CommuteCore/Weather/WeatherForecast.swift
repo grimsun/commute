@@ -44,6 +44,17 @@ public struct WeatherForecast: Equatable, Sendable {
         hours.first { $0.start <= date && date < $0.start.addingTimeInterval(3600) }
     }
 
+    /// The next `count` whole hours after `now` (at 8:46, 9:00 to 12:00), for the schedule's
+    /// look ahead; empty past the forecast's end.
+    public func nextHours(after now: Date, count: Int = 4, calendar: Calendar = .caltrain) -> [WeatherMoment] {
+        guard let next = calendar.nextDate(after: now, matching: DateComponents(minute: 0, second: 0), matchingPolicy: .nextTime) else { return [] }
+        let moments = (0..<count).map { offset in
+            let time = next.addingTimeInterval(TimeInterval(offset) * 3600)
+            return WeatherMoment(kind: .upcoming, time: time, hour: hour(at: time))
+        }
+        return moments.contains { $0.hour != nil } ? moments : []
+    }
+
     /// The wettest rainy hour overlapping `start...end`, if any.
     public func rain(from start: Date, to end: Date) -> Hour? {
         hours
@@ -73,10 +84,12 @@ public enum WeatherCondition: Equatable, Sendable {
 }
 
 /// The forecast for one of the day's four moments outside: leaving home, getting to work,
-/// leaving work and getting home.
+/// leaving work and getting home; or, between stations, one of the coming hours.
 public struct WeatherMoment: Equatable, Sendable, Identifiable {
     public enum Kind: Sendable, CaseIterable {
         case leaveHome, arriveWork, leaveWork, arriveHome
+        /// A coming hour, at the schedule's departure station.
+        case upcoming
     }
 
     public var kind: Kind
@@ -84,7 +97,8 @@ public struct WeatherMoment: Equatable, Sendable, Identifiable {
     /// `nil` outside the forecast.
     public var hour: WeatherForecast.Hour?
 
-    public var id: Kind { kind }
+    /// The commute's moments keep their place as times shift; coming hours are their time.
+    public var id: String { kind == .upcoming ? "\(time.timeIntervalSince1970)" : "\(kind)" }
 
     public init(kind: Kind, time: Date, hour: WeatherForecast.Hour?) {
         self.kind = kind
