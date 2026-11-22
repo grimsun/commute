@@ -322,9 +322,9 @@ struct HeroCard: View {
         .padding(.vertical, 6)
     }
 
+    /// "Train 506"; the header and headline already name the day.
     private func trainTitle(_ train: TrainDeparture) -> String {
-        let day = Calendar.caltrain.isDate(train.departureTime, inSameDayAs: now) ? "" : Format.day(train.departureTime, relativeTo: now) + " · "
-        return day + "Train \(train.trainNumber)"
+        "Train \(train.trainNumber)"
     }
 
     /// Commute mode with the next trip on a later day, beyond the hours before it when the app
