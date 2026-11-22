@@ -66,8 +66,12 @@ public struct DashboardView: View {
     }
 
     private var compactDetent: PresentationDetent {
-        // Detents must differ; before measuring, keep compact clearly below collapsed.
-        .height(min(compactHeight, collapsedHeight - 40))
+        .height(compactDetentHeight)
+    }
+
+    /// Detents must differ; before measuring, keep compact clearly below collapsed.
+    private var compactDetentHeight: CGFloat {
+        min(compactHeight, collapsedHeight - 40)
     }
 
     /// Full height, short of the map's top controls, so the mode switch stays in reach.
@@ -119,9 +123,10 @@ public struct DashboardView: View {
         CommuteMapView(
             profile: viewModel.routeProfile,
             isSchedule: viewModel.mode == .schedule,
-            // One inset for every sheet position: changing it as the sheet settles would make the
-            // map jump. Compact just reveals more of the map.
+            // One inset for every sheet position: changing it would make the map jump. Compact
+            // zooms in to fill the space it frees by moving only the camera, and back out going up.
             bottomInset: collapsedHeight,
+            extraBottomSpace: panel == .compact ? collapsedHeight - compactDetentHeight : 0,
             recenterRequest: recenterRequest,
             trainPath: viewModel.trainPath,
             trainDelay: TimeInterval(viewModel.plan?.train?.train.delaySeconds ?? 0),
