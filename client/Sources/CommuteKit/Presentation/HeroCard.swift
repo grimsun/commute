@@ -94,17 +94,12 @@ struct HeroCard: View {
                             .accessibilityLabel("Pinned")
                     }
                     Spacer()
-                    // Live trains show their delay; others which way they run (the schedule type is on the list).
-                    if (plan.transitSource != .live || train.isTracked != true), !train.isCancelled {
-                        Text(boundLabel)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                    } else {
-                        DelayLabel(train: train, isLive: plan.transitSource == .live && train.isTracked == true)
-                            .font(.subheadline.weight(.semibold))
-                    }
+                    // Which way it runs, always; a live delay sits next to the headline instead.
+                    Text(boundLabel)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                 }
 
                 // Two rows, so the arrow sits on the times' line and the ride length on the stations'.
