@@ -35,6 +35,8 @@ public struct DashboardView: View {
     /// The sheet settles at its smallest detent while presenting, so compact joins afterwards.
     @State private var allowsCompact = false
     @State private var recenterRequest = 0
+    /// The home indicator's strip: the floating sheet's detents start above it.
+    @State private var bottomSafeArea: CGFloat = 0
     private let showsSettingsOnLaunch: Bool
 
     public init(viewModel: CommuteViewModel, panelSize: PanelSize = .collapsed, showsSettings: Bool = false) {
@@ -123,10 +125,10 @@ public struct DashboardView: View {
         CommuteMapView(
             profile: viewModel.routeProfile,
             isSchedule: viewModel.mode == .schedule,
-            // One inset for every sheet position: changing it would make the map jump. Compact
-            // zooms in to fill the space it frees by moving only the camera, and back out going up.
-            bottomInset: collapsedHeight,
-            extraBottomSpace: panel == .compact ? collapsedHeight - compactDetentHeight : 0,
+            // Up to the sheet's top edge, which also places the Maps logo just above it. Compact zooms
+            // in to fill the space it frees, and back out going up. Expanded covers the map, so it
+            // keeps the collapsed framing.
+            bottomInset: (panel == .compact ? compactDetentHeight : collapsedHeight) + bottomSafeArea,
             recenterRequest: recenterRequest,
             trainPath: viewModel.trainPath,
             trainDelay: TimeInterval(viewModel.plan?.train?.train.delaySeconds ?? 0),
@@ -135,6 +137,12 @@ public struct DashboardView: View {
             isVisible: !isExpanded
         )
         .ignoresSafeArea()
+        .background {
+            Color.clear
+                .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { inset in
+                    bottomSafeArea = inset
+                }
+        }
         .overlay(alignment: .top) {
             // A separate view, so refresh progress redraws only the buttons, not the map.
             MapControls(viewModel: viewModel, onModeChange: {
