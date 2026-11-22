@@ -173,13 +173,23 @@ struct HeroCard: View {
                     }
 
                     HStack(spacing: 8) {
-                        Text(statusTitle(option, urgency: urgency))
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
-                            .foregroundStyle(urgency.color)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                            .accessibilityIdentifier("leave-headline")
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(statusTitle(option, urgency: urgency))
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundStyle(urgency.color)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                                .accessibilityIdentifier("leave-headline")
+                                .layoutPriority(1)
+                            // Live trains: on time, late or cancelled. Timetable-only trains say nothing.
+                            if isLive(train) || train.isCancelled {
+                                DelayLabel(train: train, isLive: isLive(train))
+                                    .font(.subheadline.weight(.semibold))
+                                    .lineLimit(1)
+                                    .accessibilityIdentifier("delay")
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         tripButton(for: option.train, urgency: urgency)
                     }
 
@@ -237,6 +247,10 @@ struct HeroCard: View {
             }
 
         }
+    }
+
+    private func isLive(_ train: TrainDeparture) -> Bool {
+        plan.transitSource == .live && train.isTracked == true
     }
 
     /// "Southbound" / "Northbound".
