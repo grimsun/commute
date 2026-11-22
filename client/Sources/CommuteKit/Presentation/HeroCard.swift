@@ -149,7 +149,7 @@ struct HeroCard: View {
                         Label(missed, systemImage: "xmark.circle.fill")
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(.red)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
+                            .transition(.opacity.combined(with: .offset(y: -6)))
                             .accessibilityIdentifier("missed-train")
                     } else if let better = betterTrain(than: option) {
                         Button {
@@ -162,7 +162,7 @@ struct HeroCard: View {
                                 .minimumScaleFactor(0.8)
                         }
                         .buttonStyle(.plain)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
+                        .transition(.opacity.combined(with: .offset(y: -6)))
                         .accessibilityHint("Pins this train")
                         .accessibilityIdentifier("better-train")
                     }
