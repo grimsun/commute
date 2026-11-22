@@ -126,6 +126,7 @@ public final class CommuteViewModel {
         location: LocationProviding? = nil,
         liveActivity: LiveActivityUpdating? = nil,
         weather: WeatherProviding? = nil,
+        savedProfile: CommuteProfile? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         self.weather = weather
@@ -138,8 +139,11 @@ public final class CommuteViewModel {
         self.location = location
         self.liveActivity = liveActivity
         self.now = now
-        self.direction = CommuteWindow.activeDirection(profile: .default, now: now())
-        self.services = factory.services(for: CommuteProfile.default.dataSource)
+        // The saved profile when read ahead (see `run()`), so the first frame looks right.
+        let profile = savedProfile ?? .default
+        self.profile = profile
+        self.direction = CommuteWindow.activeDirection(profile: profile, now: now())
+        self.services = factory.services(for: profile.dataSource)
     }
 
     // MARK: Lifecycle

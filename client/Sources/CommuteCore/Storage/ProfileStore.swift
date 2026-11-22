@@ -32,8 +32,17 @@ public actor UserDefaultsProfileStore: CommuteProfileStore {
     }
 
     public func loadProfile() async -> CommuteProfile? {
-        guard let data = defaults.data(forKey: key) else { return nil }
-        return try? JSONDecoder().decode(CommuteProfile.self, from: data)
+        Self.decode(defaults.data(forKey: key))
+    }
+
+    /// The saved profile, read right away: at launch, so the first frame already has the
+    /// rider's appearance rather than switching to it once `loadProfile()` returns.
+    public nonisolated static func savedProfile(key: String = "commute.profile.v2") -> CommuteProfile? {
+        decode(UserDefaults.standard.data(forKey: key))
+    }
+
+    private static func decode(_ data: Data?) -> CommuteProfile? {
+        data.flatMap { try? JSONDecoder().decode(CommuteProfile.self, from: $0) }
     }
 
     public func saveProfile(_ profile: CommuteProfile) async {

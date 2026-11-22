@@ -20,6 +20,7 @@ struct CommuteAppApp: App {
             location: DeviceLocationProvider(),
             liveActivity: SystemLiveActivities(),
             weather: OpenMeteoWeather(),
+            savedProfile: UserDefaultsProfileStore.savedProfile(),
             now: DebugLaunch.clock
         )
         #if DEBUG
