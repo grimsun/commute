@@ -84,9 +84,10 @@ services when the data source changes.
   train's leave now alert in 5 seconds. Background app refresh (`lab.CommuteApp.alerts`) re-plans the week's
   alerts every 6 hours and about an hour before the next get ready / leave now, fetching live delays when a
   trip is within 90 minutes; iOS decides when it actually runs.
-- Weather strip (Commute, top right): four icons with times for leaving home, getting to work, leaving work
+- Weather strip (top right): in Commute, four icons with times for leaving home, getting to work, leaving work
   and getting home on the card's day, from that day's trains (planned from three hours before each target)
-  and the forecast at the home or work address; moments already past are dimmed.
+  and the forecast at the home or work address; moments already past are dimmed. In Schedule, the next four
+  whole hours at the departure station. A tap switches to temperatures; a long press offers the Weather app.
 - Rain warnings (Settings → Weather → Forecast & rain warnings, on by default; also turns the strip off): Open-Meteo's hourly forecast for the home and work
   addresses (free, no key; cached 30 min). Rain counts as likely at ≥ 50% or ≥ 0.3 mm in an hour, checked for
   the ride to the station (origin's forecast, leave → platform) and from it (destination's, train arrival → door).
