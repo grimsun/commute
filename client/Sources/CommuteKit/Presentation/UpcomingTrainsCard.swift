@@ -105,7 +105,12 @@ struct UpcomingTrainsCard: View {
                                     .padding(.vertical, 8)
                             }
                         }
-                        .transition(.opacity.combined(with: .move(edge: .top)))
+                        // Fades rather than sliding by its own height, which drew it over the
+                        // row above while closing.
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .offset(y: -6)),
+                            removal: .opacity.animation(.easeOut(duration: 0.15))
+                        ))
                     }
                     if train.id != rows.last?.id {
                         Divider()
