@@ -95,6 +95,14 @@ public struct CommutePlan: Equatable, Sendable {
     public var transitNotice: String?
     /// `nil` when car routing is unavailable.
     public var car: CarOption?
+    /// None of the rider's train types run any more (on weekends only Locals do), so the train
+    /// is planned from every type rather than none.
+    public var usesAnyService = false
+
+    /// A train the plan can use: one of the rider's types, or any once none of those run.
+    public func uses(_ train: TrainDeparture, preferred: Set<TrainService>) -> Bool {
+        usesAnyService ? !train.isCancelled : train.isUsable(preferred: preferred)
+    }
 
     public init(
         generatedAt: Date,
@@ -160,7 +168,7 @@ public struct CommutePlan: Equatable, Sendable {
         let currentLeave = attempts(for: current).leaveAt
         return upcoming
             .filter {
-                $0.id != current.id && $0.isUsable(preferred: preferred)
+                $0.id != current.id && uses($0, preferred: preferred)
                     && attempts(for: $0).leaveAt >= currentLeave
                     && $0.arrivalTime <= current.arrivalTime.addingTimeInterval(-Self.betterTrainMinimumGain)
             }

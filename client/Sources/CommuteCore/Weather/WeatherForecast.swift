@@ -158,7 +158,7 @@ public struct CommuteForecasts: Equatable, Sendable {
         }
         return plan.upcoming
             .filter { train in
-                train.id != current.id && train.isUsable(preferred: preferred) && plan.isCatchable(train, at: now)
+                train.id != current.id && plan.uses(train, preferred: preferred) && plan.isCatchable(train, at: now)
                     && distance(train) <= range
                     // Known to be dry, not just past the forecast's end.
                     && origin.hour(at: plan.attempts(for: train).leaveAt) != nil

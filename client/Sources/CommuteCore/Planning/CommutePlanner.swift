@@ -84,7 +84,12 @@ public struct CommutePlanner: Sendable {
             departures += targetSnapshot.departures.filter { !known.contains($0.id) }
         }
         let all = departures.sorted { $0.departureTime < $1.departureTime }
-        let candidates = all.filter { $0.isUsable(preferred: profile.preferredServices) }
+        var candidates = all.filter { $0.isUsable(preferred: profile.preferredServices) }
+        // None of the chosen types left (weekends run only Locals): any train beats none.
+        let usesAnyService = !candidates.contains { attempts($0).leaveAt >= targetLeave && now <= attempts($0).tooLateAt }
+        if usesAnyService {
+            candidates = all.filter { !$0.isCancelled }
+        }
 
         let picked = pickedTripID.flatMap { id in
             all.first { $0.tripID == id && !$0.isCancelled && now <= attempts($0).tooLateAt }
@@ -117,7 +122,7 @@ public struct CommutePlanner: Sendable {
         let departed = all.filter { $0.departureTime < now }.suffix(Self.departedShown)
         let upcoming = Array(departed) + all.filter { $0.departureTime >= now }
 
-        return CommutePlan(
+        var plan = CommutePlan(
             generatedAt: now,
             direction: direction,
             originStation: originStation,
@@ -138,6 +143,8 @@ public struct CommutePlanner: Sendable {
             transitNotice: snapshot.notice,
             car: await car
         )
+        plan.usesAnyService = usesAnyService && trainOption != nil
+        return plan
     }
 
     /// Driving door to door instead, for one direction; `nil` without traffic data.

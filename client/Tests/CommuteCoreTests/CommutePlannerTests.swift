@@ -149,6 +149,21 @@ final class CommutePlannerTests: XCTestCase {
         XCTAssertEqual(plan.upcoming.map(\.trainNumber), ["403", "503", "105"], "the list shows every service")
     }
 
+    func testAnyServiceWhenNoneOfTheChosenOnesRun() async throws {
+        // Locals only, like a weekend, for an express rider: the next Local rather than nothing.
+        let trains = [train("651", departs: at(8, 25)), train("653", departs: at(8, 55))]
+        let plan = try await planner(trains).plan(profile: profile(services: [.express]), direction: .homeToWork, now: at(7, 0))
+
+        XCTAssertEqual(plan.train?.train.trainNumber, "651")
+        XCTAssertEqual(plan.train?.fallback?.trainNumber, "653")
+        XCTAssertTrue(plan.usesAnyService)
+
+        let mixed = try await planner(trains + [train("503", departs: at(9, 5), service: .express)])
+            .plan(profile: profile(services: [.express]), direction: .homeToWork, now: at(7, 0))
+        XCTAssertEqual(mixed.train?.train.trainNumber, "503", "a chosen type later still wins")
+        XCTAssertFalse(mixed.usesAnyService)
+    }
+
     func testListLeadsWithOneDepartedTrain() async throws {
         let trains = (0..<5).map { train("10\($0)", departs: at(7, 0).addingTimeInterval(Double($0) * 15 * 60)) }
         let plan = try await planner(trains).plan(profile: profile(), direction: .homeToWork, now: at(7, 40))
