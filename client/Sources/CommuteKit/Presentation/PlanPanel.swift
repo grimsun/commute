@@ -131,7 +131,7 @@ struct PlanPanel: View {
                                 isElsewhere: isSchedule || (tripInProgress == nil && elsewhereTrain != nil),
                                 isOtherDay: isOtherDay,
                                 scheduleLabel: scheduleDetail,
-                                preferredServices: isSchedule ? nil : routeProfile.preferredServices,
+                                preferredServices: isSchedule || plan.usesAnyService ? nil : routeProfile.preferredServices,
                                 onPick: { train in
                                     Task { await viewModel.pick(train) }
                                     onPickTrain()

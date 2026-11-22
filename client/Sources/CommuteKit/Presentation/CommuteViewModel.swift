@@ -876,7 +876,7 @@ public final class CommuteViewModel {
     private var commuteElsewhereTrain: TrainDeparture? {
         guard isAwayFromStart, let plan = commutePlan, takenTrain(direction: direction, plan: plan) == nil else { return nil }
         let date = now()
-        return plan.upcoming.first { $0.isUsable(preferred: profile.preferredServices) && $0.departureTime > date }
+        return plan.upcoming.first { plan.uses($0, preferred: profile.preferredServices) && $0.departureTime > date }
     }
 
     /// The train taken on a departed trip; one rule (`TripRecord`) for the card, map and alerts.

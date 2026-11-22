@@ -434,7 +434,7 @@ struct HeroCard: View {
     /// Schedule mode: "Then 5:42 PM · Local 147", the train after this one.
     private func followingLine(after train: TrainDeparture) -> String {
         guard let next = plan.upcoming.first(where: {
-            $0.isUsable(preferred: profile.preferredServices) && $0.departureTime > train.departureTime
+            plan.uses($0, preferred: profile.preferredServices) && $0.departureTime > train.departureTime
         }) else {
             return "Last train for now"
         }
@@ -489,7 +489,7 @@ struct HeroCard: View {
         guard !isNeutral, !option.isManual, !hasDeparted else { return nil }
         // Only trains that were the target (or a later replacement), never ones before the target time.
         let missed = plan.upcoming.last {
-            $0.isUsable(preferred: profile.preferredServices)
+            plan.uses($0, preferred: profile.preferredServices)
                 && $0.departureTime > now && $0.departureTime < option.train.departureTime
                 && plan.attempts(for: $0).leaveAt >= plan.targetLeave
                 && plan.attempts(for: $0).tooLateAt < now
