@@ -193,21 +193,29 @@ struct DelayLabel: View {
     let train: TrainDeparture
     /// Without realtime data a train is only "scheduled", never confirmed on time.
     let isLive: Bool
+    /// A tinted capsule, to sit beside a large headline.
+    var isBadge = false
 
     var body: some View {
-        if train.isCancelled {
-            Text("Cancelled")
-                .foregroundStyle(.red)
-        } else if train.delayMinutes > 0 {
-            Text("+\(train.delayMinutes) min")
-                .foregroundStyle(train.delayMinutes >= 5 ? .red : .orange)
-        } else if isLive {
-            Text("On time")
-                .foregroundStyle(.green)
+        let (title, color) = status
+        if isBadge {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(color)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(color.opacity(0.14), in: Capsule())
+                .fixedSize()
         } else {
-            Text("Scheduled")
-                .foregroundStyle(.secondary)
+            Text(title)
+                .foregroundStyle(color)
         }
+    }
+
+    private var status: (String, Color) {
+        if train.isCancelled { return ("Cancelled", .red) }
+        if train.delayMinutes > 0 { return ("+\(train.delayMinutes) min", train.delayMinutes >= 5 ? .red : .orange) }
+        return isLive ? ("On time", .green) : ("Scheduled", .secondary)
     }
 }
 

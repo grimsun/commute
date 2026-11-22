@@ -168,7 +168,7 @@ struct HeroCard: View {
                     }
 
                     HStack(spacing: 8) {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        HStack(spacing: 8) {
                             Text(statusTitle(option, urgency: urgency))
                                 .font(.system(size: 28, weight: .bold, design: .rounded))
                                 .foregroundStyle(urgency.color)
@@ -178,9 +178,7 @@ struct HeroCard: View {
                                 .layoutPriority(1)
                             // Live trains: on time, late or cancelled. Timetable-only trains say nothing.
                             if isLive(train) || train.isCancelled {
-                                DelayLabel(train: train, isLive: isLive(train))
-                                    .font(.subheadline.weight(.semibold))
-                                    .lineLimit(1)
+                                DelayLabel(train: train, isLive: isLive(train), isBadge: true)
                                     .accessibilityIdentifier("delay")
                             }
                         }
