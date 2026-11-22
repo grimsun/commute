@@ -342,9 +342,12 @@ struct HeroCard: View {
             return urgency == .missed ? "Departed" : "Next train"
         }
         if isLaterDay(option) {
-            // "Monday morning", "Tomorrow evening".
-            let part = plan.direction == .homeToWork ? "morning" : "evening"
-            return "\(Format.day(option.attempts.leaveAt, relativeTo: now)) \(part)"
+            // "Monday morning", "Tomorrow evening": from the clock, not the direction, so a trip
+            // home set for 6 AM doesn't read as evening.
+            let leave = option.attempts.leaveAt
+            let hour = Calendar.caltrain.component(.hour, from: leave)
+            let part = hour < 12 ? "morning" : hour < 17 ? "afternoon" : hour < 21 ? "evening" : "night"
+            return "\(Format.day(leave, relativeTo: now)) \(part)"
         }
         if hasDeparted {
             if now < option.train.departureTime { return "You’re on your way" }
