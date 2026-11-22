@@ -8,6 +8,10 @@ struct CommuteMapView: View {
     let isSchedule: Bool
     /// Height covered by the sheet, so the route is framed in the visible part.
     let bottomInset: CGFloat
+    /// The map's own bottom safe area, which places the Maps logo: fixed, just above the lowest
+    /// sheet, since changing it makes the map jump. The route is fitted above `bottomInset` by
+    /// moving the camera alone, so a new sheet height zooms smoothly.
+    var logoInset: CGFloat = 0
     /// Changes when the route should be re-framed, e.g. after the rider panned away and tapped refresh.
     var recenterRequest = 0
     /// The train on the card: its track draws the ride, and it moves along it.
@@ -25,13 +29,9 @@ struct CommuteMapView: View {
 
     @State private var position: MapCameraPosition = .automatic
     @State private var trainPosition: TrainPosition?
-    /// The map's size inside its safe area (above `padding`), for fitting the route.
+    /// The map's size inside its safe area (above `logoInset`), for fitting the route.
     @State private var viewport: CGSize = .zero
-    /// The bottom safe area actually applied, which also places the Maps logo. It follows
-    /// `bottomInset` only once the camera has zoomed to the new framing: changing it first would
-    /// make the map jump.
-    @State private var appliedInset: CGFloat?
-    private var padding: CGFloat { appliedInset ?? bottomInset }
+    @State private var hasFramed = false
 
     /// The lines and pins, built once per set of inputs rather than on every body pass: the train
     /// marker redraws the map once a second, and the track runs to thousands of points.
@@ -44,11 +44,12 @@ struct CommuteMapView: View {
 
     private var geometry = Geometry()
 
-    init(profile: CommuteProfile, isSchedule: Bool, bottomInset: CGFloat, recenterRequest: Int = 0, trainPath: TrainPath? = nil,
+    init(profile: CommuteProfile, isSchedule: Bool, bottomInset: CGFloat, logoInset: CGFloat = 0, recenterRequest: Int = 0, trainPath: TrainPath? = nil,
          trainDelay: TimeInterval = 0, isLive: Bool = false, now: @escaping () -> Date = Date.init, isVisible: Bool = true) {
         self.profile = profile
         self.isSchedule = isSchedule
         self.bottomInset = bottomInset
+        self.logoInset = logoInset
         self.recenterRequest = recenterRequest
         self.trainPath = trainPath
         self.trainDelay = trainDelay
@@ -103,24 +104,20 @@ struct CommuteMapView: View {
         .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
             viewport = size
         }
-        .safeAreaPadding(.bottom, padding)
+        .safeAreaPadding(.bottom, logoInset)
         // Keep framed pins clear of the settings and refresh buttons.
         .safeAreaPadding(.top, 56)
         .task(id: framingKey) {
-            // Zoom to fit above the sheet's new height, then move the inset (and the logo) there;
-            // the same route in the same space, so that step doesn't move the map.
-            let target = bottomInset
-            withAnimation(.smooth(duration: 0.45)) {
-                position = .rect(framedRect(fittingAbove: target))
-            }
-            guard padding != target else { return }
-            try? await Task.sleep(for: .seconds(0.5))
-            guard !Task.isCancelled else { return }
-            var instant = Transaction()
-            instant.disablesAnimations = true
-            withTransaction(instant) {
-                appliedInset = target
-                position = .rect(boundingRect)
+            // At launch, straight to the route: animating there from MapKit's default view loads
+            // every zoom level's tiles on the way, which shows as patches.
+            guard viewport != .zero else { return }
+            if hasFramed {
+                withAnimation(.smooth(duration: 0.45)) {
+                    position = .rect(framedRect)
+                }
+            } else {
+                position = .rect(framedRect)
+                hasFramed = true
             }
         }
         // Moves the train once a second; small steps read as gliding at map scale. Only a real
@@ -210,16 +207,15 @@ struct CommuteMapView: View {
     }
 
     private var framingKey: String {
-        allCoordinates.map(\.cacheKey).joined(separator: "|") + "|\(Int(bottomInset))|\(Int(padding))|\(Int(viewport.width))x\(Int(viewport.height))|\(recenterRequest)"
+        allCoordinates.map(\.cacheKey).joined(separator: "|") + "|\(Int(bottomInset))|\(Int(logoInset))|\(Int(viewport.width))x\(Int(viewport.height))|\(recenterRequest)"
     }
 
     /// The rect handed to the map, which fits it to the viewport: the route's rect, grown or
-    /// shrunk so the route fits above `target` rather than above the applied inset, top-aligned.
-    /// With the inset already there, it's the route's rect.
-    private func framedRect(fittingAbove target: CGFloat) -> MKMapRect {
+    /// shrunk so the route fits above `bottomInset` rather than above `logoInset`, top-aligned.
+    private var framedRect: MKMapRect {
         let route = boundingRect
-        let visibleHeight = viewport.height + padding - target
-        guard viewport.width > 0, viewport.height > 0, visibleHeight > 0, padding != target else { return route }
+        let visibleHeight = viewport.height + logoInset - bottomInset
+        guard viewport.width > 0, viewport.height > 0, visibleHeight > 0, logoInset != bottomInset else { return route }
         // Map points per screen point.
         let scale = max(route.size.width / viewport.width, route.size.height / visibleHeight)
         let size = MKMapSize(width: viewport.width * scale, height: viewport.height * scale)

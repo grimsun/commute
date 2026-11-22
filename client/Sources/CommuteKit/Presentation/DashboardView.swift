@@ -125,10 +125,11 @@ public struct DashboardView: View {
         CommuteMapView(
             profile: viewModel.routeProfile,
             isSchedule: viewModel.mode == .schedule,
-            // Up to the sheet's top edge, which also places the Maps logo just above it. Compact zooms
-            // in to fill the space it frees, and back out going up. Expanded covers the map, so it
-            // keeps the collapsed framing.
+            // Up to the sheet's top edge: compact zooms in to fill the space it frees, and back out
+            // going up. Expanded covers the map, so it keeps the collapsed framing. The Maps logo
+            // stays just above the compact sheet (under the taller ones).
             bottomInset: (panel == .compact ? compactDetentHeight : collapsedHeight) + bottomSafeArea,
+            logoInset: compactDetentHeight + bottomSafeArea,
             recenterRequest: recenterRequest,
             trainPath: viewModel.trainPath,
             trainDelay: TimeInterval(viewModel.plan?.train?.train.delaySeconds ?? 0),
