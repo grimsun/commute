@@ -76,6 +76,8 @@ public final class CommuteViewModel {
     private let weather: WeatherProviding?
     /// Forecasts at the home and work addresses.
     private var forecasts = CommuteForecasts()
+    /// Schedule mode: the forecast at its departure station, for the coming hours.
+    private var stationForecast: WeatherForecast?
     /// The day the weather strip covers, with its morning and evening plans; re-planned when the
     /// day or the profile changes.
     private var weatherDay: (day: Int, profile: CommuteProfile, plans: [Direction: CommutePlan])?
@@ -392,9 +394,16 @@ public final class CommuteViewModel {
         }
     }
 
-    /// Fetches the home and work forecasts; the provider caches them, so this is cheap to repeat.
+    /// Fetches the home and work forecasts, and in schedule mode the departure station's; the
+    /// provider caches them, so this is cheap to repeat.
     private func updateForecasts() async {
         guard let weather, profile.weatherEnabled else { return }
+        if mode == .schedule, let station = StationCatalog.station(id: scheduleRoute.originStationID) {
+            let fetched = await weather.forecast(at: station.coordinate)
+            if fetched != stationForecast {
+                stationForecast = fetched
+            }
+        }
         @Sendable func fetch(_ coordinate: Coordinate?) async -> WeatherForecast? {
             guard let coordinate else { return nil }
             return await weather.forecast(at: coordinate)
@@ -424,10 +433,14 @@ public final class CommuteViewModel {
         weatherDay = (day, profile, plans)
     }
 
-    /// Leaving home, getting to work, leaving work and getting home on the commute's day, in
-    /// either mode; empty without a forecast.
+    /// Leaving home, getting to work, leaving work and getting home on the commute's day; in
+    /// schedule mode, the next four hours at the departure station. Empty without a forecast.
     public var weatherMoments: [WeatherMoment] {
-        guard profile.weatherEnabled, profile.hasAddresses, let weatherDay else { return [] }
+        guard profile.weatherEnabled else { return [] }
+        if mode == .schedule {
+            return stationForecast?.nextHours(after: now()) ?? []
+        }
+        guard profile.hasAddresses, let weatherDay else { return [] }
         let moments = forecasts.moments(toWork: weatherDay.plans[.homeToWork], toHome: weatherDay.plans[.workToHome])
         return moments.contains { $0.hour != nil } ? moments : []
     }

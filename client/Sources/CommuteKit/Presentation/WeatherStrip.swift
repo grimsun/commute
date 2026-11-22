@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The day's weather at a glance: leaving home and getting to work, then leaving work and getting
-/// home, each with its time. Moments already past are dimmed. A tap switches between the sky and
+/// home, each with its time; between stations, the coming hours. Moments already past are dimmed. A tap switches between the sky and
 /// the temperature, remembered for next time; a long press offers the Weather app.
 struct WeatherStrip: View {
     let moments: [WeatherMoment]
@@ -146,6 +146,7 @@ struct WeatherStrip: View {
         case .arriveWork: "Get to work"
         case .leaveWork: "Leave work"
         case .arriveHome: "Get home"
+        case .upcoming: "At"
         }
         var parts = ["\(title) \(Format.time(moment.time))"]
         if let hour = moment.hour {
